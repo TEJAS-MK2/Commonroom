@@ -21,7 +21,7 @@ create table if not exists public.chat_rooms (
 create table if not exists public.chat_messages (
   id uuid primary key default gen_random_uuid(),
   room_id uuid not null references public.chat_rooms(id) on delete cascade,
-  sender_id uuid not null references auth.users(id) on delete cascade,
+  sender_id uuid not null references public.chat_profiles(id) on delete cascade,
   body text not null check (char_length(body) between 1 and 2000),
   created_at timestamptz not null default now()
 );

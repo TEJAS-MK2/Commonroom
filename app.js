@@ -13,7 +13,7 @@ const state = {
   name: storage.get("commonroom-name", ""),
   senderKey: storage.get("commonroom-guest-id", ""),
   rooms: [], activeRoom: null, messages: [], messageChannel: null,
-  typingChannel: null, presence: null, typingTimer: null, online: new Map(), reactions: [], editTokens: {}, pinned: null, replyTarget: null, reactions: [], pinned: null, replyTarget: null, editTokens: JSON.parse(storage.get("commonroom-edit-tokens", "{}"))
+  typingChannel: null, presence: null, typingTimer: null, online: new Map(), reactions: [], editTokens: {}, pinned: null, replyTarget: null, editTokens: JSON.parse(storage.get("commonroom-edit-tokens", "{}")), moderatorKey: (() => { try { return sessionStorage.getItem("commonroom-moderator-key") || ""; } catch { return ""; } })(), moderatorActive: false
 };
 if (!state.senderKey) {
   state.senderKey = crypto.randomUUID();
@@ -455,7 +455,7 @@ function renderMessages() {
     const meta = grouped ? "" : '<div class="message-meta"><button class="message-author" type="button" data-profile="' + escapeHtml(name) + '" data-sender="' + message.sender_key + '">' + escapeHtml(name) + '</button>' + (mine ? '<span class="you-tag">YOU</span>' : '') + '<time>' + formatTime(message.created_at) + '</time>' + (message.edited_at ? '<span class="edited-tag">edited</span>' : '') + '</div>';
     const actions = '<div class="message-actions"><button type="button" data-reply="' + message.id + '">↩ Reply' + (replies ? ' · ' + replies : '') + '</button><button type="button" data-add-reaction="' + message.id + '">☺ React</button>' +
       (canManage ? '<button type="button" data-edit="' + message.id + '">Edit</button><button type="button" data-delete="' + message.id + '">Delete</button>' : '') +
-      '<button type="button" data-pin="' + message.id + '">' + (state.pinned?.message_id === message.id ? 'Unpin' : 'Pin') + '</button></div>';
+      (state.moderatorActive ? '<button type="button" data-pin="' + message.id + '">' + (state.pinned?.message_id === message.id ? 'Unpin' : 'Pin') + '</button>' : '') + '<button type="button" data-report="' + message.id + '">Report</button></div>';
     return separator + '<article class="message ' + (mine ? 'mine ' : '') + (grouped ? 'grouped' : '') + '" id="message-' + message.id + '" data-message-card="' + message.id + '">' +
       '<button class="avatar message-avatar ' + (mine ? 'self-avatar' : '') + '" type="button" data-profile="' + escapeHtml(name) + '" data-sender="' + message.sender_key + '">' + (grouped ? '' : escapeHtml(initials(name))) + '</button>' +
       '<div class="message-content">' + meta + (parent ? '<button class="reply-quote" type="button" data-jump="' + parent.id + '"><b>↪ ' + escapeHtml(parent.sender_name) + '</b><span>' + escapeHtml(parent.body.slice(0, 90)) + '</span></button>' : '') +
@@ -524,25 +524,27 @@ $("#messages").addEventListener("click", async (event) => {
     }
     return;
   }
+  const report = event.target.closest("[data-report]");
+  if (report) {
+    const reason = (window.prompt("Report reason: spam, harassment, hate, personal-info, or other", "spam") || "").trim().toLowerCase();
+    if (!["spam","harassment","hate","personal-info","other"].includes(reason)) { toast("Choose one of the listed report reasons."); return; }
+    const details = window.prompt("Optional details (up to 500 characters):", "") || "";
+    const { error } = await supabase.functions.invoke("chat-moderation", { body: { action: "report", message_id: report.dataset.report, reporter_key: state.senderKey, reason, details } });
+    if (error) toast(error.message || "Could not submit report.");
+    else toast("Report sent to the moderation queue. Thank you.");
+    return;
+  }
   const pin = event.target.closest("[data-pin]");
   if (pin) {
+    if (!state.moderatorActive) return;
     const messageId = pin.dataset.pin;
-    try {
-      if (state.pinned?.message_id === messageId) {
-        const result = await supabase.from("chat_guest_pins").delete().eq("room_id", state.activeRoom.id);
-        if (result.error) throw result.error;
-        state.pinned = null;
-      } else {
-        if (state.pinned) {
-          const removed = await supabase.from("chat_guest_pins").delete().eq("room_id", state.activeRoom.id);
-          if (removed.error) throw removed.error;
-        }
-        const added = await supabase.from("chat_guest_pins").insert({ room_id: state.activeRoom.id, message_id: messageId, pinned_by: state.senderKey }).select().single();
-        if (added.error) throw added.error;
-        state.pinned = added.data;
-      }
-      renderMessages();
-    } catch (error) { toast(error.message || "Could not update pinned message."); }
+    const action = state.pinned?.message_id === messageId ? "unpin-message" : "pin-message";
+    const { error } = await moderationRequest({ action, room_id: state.activeRoom.id, message_id: messageId, moderator_key: state.senderKey });
+    if (error) toast(error.message || "Could not update pinned message.");
+    else {
+      const result = await supabase.from("chat_guest_pins").select("room_id,message_id,pinned_by,created_at").eq("room_id", state.activeRoom.id).maybeSingle();
+      state.pinned = result.data || null; renderMessages(); toast(action === "pin-message" ? "Message pinned for this room." : "Pin removed.");
+    }
     return;
   }
 });
@@ -550,5 +552,75 @@ $("#pinned-banner").addEventListener("click", (event) => {
   if (event.target.closest("#jump-pinned") && state.pinned) $("#message-" + state.pinned.message_id)?.scrollIntoView({ behavior: "smooth", block: "center" });
 });
 $("#reply-context").addEventListener("click", (event) => { if (event.target.closest("#cancel-reply")) clearReplyTarget(); });
+
+/* Trusted moderation controls. The moderator secret is kept only for this tab session. */
+async function moderationRequest(body) {
+  if (!state.moderatorKey) return { data: null, error: new Error("Moderator access is locked.") };
+  const result = await supabase.functions.invoke("chat-moderation", {
+    body, headers: { "x-moderator-key": state.moderatorKey }
+  });
+  if (result.error) return result;
+  if (result.data?.error) return { data: null, error: new Error(result.data.error) };
+  return result;
+}
+function lockModerator() {
+  state.moderatorKey = ""; state.moderatorActive = false;
+  try { sessionStorage.removeItem("commonroom-moderator-key"); } catch {}
+  $("#moderator-panel").hidden = true;
+  $("#moderator-open").textContent = "Moderation";
+  renderMessages();
+}
+async function refreshModerationQueue() {
+  const result = await moderationRequest({ action: "list-reports" });
+  if (result.error) { toast(result.error.message || "Could not load moderation queue."); lockModerator(); return; }
+  state.moderatorActive = true;
+  $("#moderator-report-count").textContent = (result.data.reports?.length || 0) + " OPEN REPORTS";
+  const messages = new Map((result.data.messages || []).map((item) => [item.id, item]));
+  $("#moderator-reports").innerHTML = (result.data.reports || []).length ? result.data.reports.map((report) => {
+    const message = messages.get(report.message_id);
+    return '<article class="moderator-report" data-report-card="' + report.id + '"><div class="report-meta"><span>' + escapeHtml(report.reason.replace("-", " ")) + '</span><time>' + formatTime(report.created_at) + '</time></div><p>' + escapeHtml(message?.body || "Message has been removed.") + '</p><small>From ' + escapeHtml(message?.sender_name || "Unknown guest") + ' · ' + escapeHtml(report.details || "No extra details") + '</small><div class="report-actions">' +
+      (message ? '<button type="button" data-mod-delete="' + message.id + '">Remove message</button><button type="button" data-mod-ban="' + message.sender_key + '">Restrict guest</button>' : '') +
+      '<button type="button" data-mod-resolve="' + report.id + '" data-status="reviewed">Mark reviewed</button><button type="button" data-mod-resolve="' + report.id + '" data-status="dismissed">Dismiss</button></div></article>';
+  }).join("") : '<div class="moderator-empty">All clear. No open reports right now.</div>';
+  $("#moderator-open").textContent = "Moderation · Active";
+  renderMessages();
+}
+async function openModerator() {
+  if (!state.moderatorKey) {
+    const key = window.prompt("Enter the moderator key configured in Supabase Edge Function secrets:");
+    if (!key) return;
+    if (key.length < 32) { toast("Moderator keys must be at least 32 characters."); return; }
+    state.moderatorKey = key;
+    try { sessionStorage.setItem("commonroom-moderator-key", key); } catch {}
+  }
+  $("#moderator-panel").hidden = false;
+  await refreshModerationQueue();
+}
+$("#moderator-open").addEventListener("click", openModerator);
+$("#moderator-close").addEventListener("click", () => { $("#moderator-panel").hidden = true; });
+$("#moderator-refresh").addEventListener("click", refreshModerationQueue);
+$("#moderator-lock").addEventListener("click", lockModerator);
+$("#moderator-reports").addEventListener("click", async (event) => {
+  const remove = event.target.closest("[data-mod-delete]");
+  const ban = event.target.closest("[data-mod-ban]");
+  const resolve = event.target.closest("[data-mod-resolve]");
+  let result;
+  if (remove) {
+    if (!confirm("Permanently remove this reported message?")) return;
+    result = await moderationRequest({ action: "delete-message", message_id: remove.dataset.modDelete });
+  } else if (ban) {
+    if (!confirm("Restrict this guest key from posting? They may still create a new anonymous identity.")) return;
+    result = await moderationRequest({ action: "ban-guest", sender_key: ban.dataset.modBan, reason: "Community moderation" });
+  } else if (resolve) {
+    result = await moderationRequest({ action: "resolve-report", report_id: resolve.dataset.modResolve, status: resolve.dataset.status });
+  } else return;
+  if (result.error) toast(result.error.message || "Moderation action failed.");
+  else { toast("Moderation action completed."); await refreshModerationQueue(); }
+});
+if (state.moderatorKey) {
+  state.moderatorActive = false;
+  // A stored session key is not trusted until the server validates it.
+  openModerator().catch(() => lockModerator());
+}
 
 if (state.activeRoom) selectRoom(state.activeRoom.id).catch((error) => toast(error.message || "Could not load reactions."));

@@ -1,0 +1,101 @@
+name: Validate and deploy Chat
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Node.js
+        uses: actions/setup-node@1e60f620b9541d7c2a0e7aab0d3b5a2d6f9c9b5a # v4.0.3
+        with:
+          node-version: 22
+
+      - name: Validate JavaScript module syntax
+        run: node --input-type=module --check < app.js
+
+      - name: Validate HTML structure and required elements
+        run: |
+          python - <<'PY'
+          from html.parser import HTMLParser
+          from pathlib import Path
+
+          class PageParser(HTMLParser):
+              def __init__(self):
+                  super().__init__()
+                  self.ids = set()
+                  self.errors = []
+              def handle_starttag(self, tag, attrs):
+                  attrs = dict(attrs)
+                  if "id" in attrs:
+                      if attrs["id"] in self.ids:
+                          self.errors.append(f"duplicate id: {attrs['id']}")
+                      self.ids.add(attrs["id"])
+
+          parser = PageParser()
+          parser.feed(Path("index.html").read_text(encoding="utf-8"))
+          required = {
+              "auth-screen", "chat-screen", "auth-form", "email", "password",
+              "display-name", "room-list", "messages", "message-form",
+              "message-input", "send-button", "sign-out", "toast"
+          }
+          missing = required - parser.ids
+          if parser.errors or missing:
+              raise SystemExit("; ".join(parser.errors + ([f"missing ids: {sorted(missing)}"] if missing else [])))
+          print(f"HTML smoke check passed: {len(parser.ids)} unique IDs.")
+          PY
+
+      - name: Check client configuration for secret keys
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          config = Path("supabase/config.js").read_text(encoding="utf-8")
+          forbidden = ("service_role", "sb_secret_", "SUPABASE_SERVICE_ROLE")
+          if any(token in config for token in forbidden):
+              raise SystemExit("A privileged Supabase key must never be shipped to the browser.")
+          if "SUPABASE_URL" not in config or "SUPABASE_PUBLISHABLE_KEY" not in config:
+              raise SystemExit("Supabase browser configuration is incomplete.")
+          print("Browser configuration smoke check passed.")
+          PY
+
+      - name: Assemble static site
+        run: |
+          mkdir -p _site/supabase
+          cp index.html styles.css app.js _site/
+          cp supabase/config.js _site/supabase/
+          touch _site/.nojekyll
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

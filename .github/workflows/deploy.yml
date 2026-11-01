@@ -25,8 +25,19 @@ jobs:
           node-version: 22
       - name: Validate JavaScript module syntax
         run: node --input-type=module --check < app.js
-      - name: Validate moderation Edge Function syntax
-        run: node --input-type=module --check < supabase/functions/chat-moderation/index.ts
+      - name: Validate moderation Edge Function source contract
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          source = Path("supabase/functions/chat-moderation/index.ts").read_text(encoding="utf-8")
+          required = ("SUPABASE_DB_URL", "CHAT_MODERATOR_SECRET", "edit-own-message", "delete-own-message", "list-reports", "list-blocks", "ban-guest", "pin-message")
+          missing = [item for item in required if item not in source]
+          if missing:
+              raise SystemExit(f"Moderation source is missing required operations: {missing}")
+          if "SUPABASE_SERVICE_ROLE_KEY" in source or "sb_secret_" in source:
+              raise SystemExit("Do not hardcode privileged Supabase credentials in source.")
+          print("Moderation source contract check passed.")
+          PY
       - name: Scan browser assets for privileged Supabase keys
         run: |
           if grep -En 'sb_secret_|SUPABASE_SERVICE_ROLE|service_role:' app.js index.html styles.css; then

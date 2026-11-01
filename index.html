@@ -2,53 +2,51 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="theme-color" content="#10131b" />
-  <meta name="description" content="Chat — a fast, real-time messaging space." />
-  <title>Chat — Real-time messaging</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#101b19" />
+  <meta name="description" content="A real-time community chat. Join the conversation instantly." />
+  <title>Commonroom — Live community chat</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="./styles.css" />
   <script type="module" src="./app.js"></script>
 </head>
 <body>
-  <main id="app">
-    <section id="auth-screen" class="auth-screen">
-      <div class="auth-card">
-        <a class="brand" href="#"><span class="brand-mark">C</span><span>chat<span class="brand-dot">.</span></span></a>
-        <p class="eyebrow">YOUR SPACE TO CONNECT</p>
-        <h1>Good conversations<br /><span>start here.</span></h1>
-        <p class="auth-copy">A calm, focused place to talk with your people in real time.</p>
-        <form id="auth-form" class="auth-form">
-          <label>Email address<input id="email" type="email" autocomplete="email" placeholder="you@example.com" required /></label>
-          <label>Password<input id="password" type="password" autocomplete="current-password" minlength="6" placeholder="At least 6 characters" required /></label>
-          <label id="name-field" class="hidden">Display name<input id="display-name" type="text" maxlength="32" placeholder="How should people know you?" /></label>
-          <button id="auth-submit" class="primary-button" type="submit">Sign in <span>→</span></button>
-        </form>
-        <p class="auth-switch"><span id="auth-switch-copy">New around here?</span> <button id="auth-switch" class="text-button" type="button">Create an account</button></p>
-        <p id="auth-message" class="form-message" role="status"></p>
-        <p class="fine-print">By continuing, you agree to keep this space kind and respectful.</p>
+  <main class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <div class="brand-row">
+        <a class="brand" href="#" aria-label="Commonroom home"><span class="brand-mark">c</span><span>commonroom<span class="brand-period">.</span></span></a>
+        <button id="new-room" class="icon-button" type="button" aria-label="Create a room" title="Create a room">＋</button>
       </div>
-      <div class="auth-art" aria-hidden="true"><div class="orb orb-one"></div><div class="orb orb-two"></div><div class="art-grid"></div><div class="floating-card card-a">✳ <span>Ideas, instantly.</span></div><div class="floating-card card-b"><span class="mini-avatar">J</span><span>Jordan is online</span><i></i></div><div class="art-caption">Less noise.<br /><strong>More connection.</strong></div></div>
-    </section>
+      <div class="workspace-card"><span class="workspace-icon">✳</span><div><strong>Open community</strong><span>Everyone is welcome</span></div><i class="live-dot"></i></div>
+      <div class="section-heading"><span>CHANNELS</span><span class="section-count" id="room-count">03</span></div>
+      <nav class="room-list" id="room-list" aria-label="Chat channels"></nav>
+      <div class="sidebar-note"><span class="note-icon">↗</span><p>Good conversations happen when everyone feels welcome.</p></div>
+      <div class="profile-card">
+        <div class="avatar" id="my-avatar">G</div>
+        <div class="profile-meta"><strong id="my-name">Guest</strong><span><i class="live-dot"></i> Here right now</span></div>
+        <button id="change-name" class="icon-button quiet" type="button" title="Change display name" aria-label="Change display name">✎</button>
+      </div>
+    </aside>
 
-    <section id="chat-screen" class="chat-shell hidden">
-      <aside class="sidebar">
-        <div class="sidebar-top"><a class="brand" href="#"><span class="brand-mark">C</span><span>chat<span class="brand-dot">.</span></span></a><button id="new-room" class="icon-button" title="Create room" aria-label="Create room">＋</button></div>
-        <div class="workspace-label">WORKSPACE <span class="status-dot"></span></div>
-        <div class="room-list" id="room-list"></div>
-        <div class="workspace-label direct-label">DIRECT MESSAGES <button id="new-dm" class="mini-add" type="button" title="Start a direct message">＋</button></div>
-        <div class="direct-list" id="direct-list"></div>
-        <div class="sidebar-bottom"><div class="profile-chip"><div id="my-avatar" class="avatar">U</div><div class="profile-meta"><strong id="my-name">You</strong><span id="my-email">online</span></div><button id="sign-out" class="icon-button subtle" title="Sign out" aria-label="Sign out">↗</button></div></div>
-      </aside>
-      <section class="conversation">
-        <header class="chat-header"><div><div class="channel-kicker">PUBLIC CHANNEL</div><h2><span class="hash">#</span><span id="active-room-name">general</span></h2><p id="room-description">A place for everyday conversations.</p></div><div class="header-right"><div class="online-stack" id="online-stack"></div><span id="online-count" class="online-count">0 online</span><button id="mobile-menu" class="icon-button mobile-only" aria-label="Open channels">☰</button></div></header>
-        <div id="messages" class="messages" aria-live="polite"><div class="empty-state"><div class="empty-icon">✳</div><h3>Make the first move.</h3><p>Say hello and start the conversation.</p></div></div>
-        <div id="typing-line" class="typing-line" aria-live="polite"></div>
-        <form id="message-form" class="composer"><label for="attachment-input" id="attachment-button" class="composer-tool attachment-button" title="Attach a file" aria-label="Attach a file">⌁</label><input id="attachment-input" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain" hidden /><button id="emoji-button" class="composer-tool" type="button" title="Add a smile">☺</button><input id="message-input" maxlength="2000" autocomplete="off" placeholder="Message #general" aria-label="Write a message" /><span class="composer-hint">ENTER ↵</span><button id="send-button" class="send-button" type="submit" aria-label="Send message">↑</button></form>
-        <div class="composer-foot">Be thoughtful. This is a shared space.</div>
-      </section>
+    <section class="main-panel">
+      <header class="topbar">
+        <div class="mobile-brand"><button id="mobile-menu" class="icon-button mobile-only" type="button" aria-label="Open channels">☰</button><span class="brand-mark small">c</span></div>
+        <div class="channel-heading"><div class="channel-kicker"><span class="live-dot"></span> COMMUNITY CHANNEL</div><h1><span class="hash">#</span><span id="active-room-name">general</span></h1><p id="room-description">A place for everyday conversations.</p></div>
+        <div class="topbar-right"><div class="online-avatars" id="online-stack"></div><div class="online-copy"><strong id="online-count">1 online</strong><span>in this room</span></div><span class="connection-pill"><i class="live-dot"></i> Live</span></div>
+      </header>
+
+      <div class="welcome-strip"><div class="welcome-symbol">✳</div><div><strong>Welcome to the conversation.</strong><span>Say hello, share an idea, or just listen in.</span></div><span class="welcome-tag">OPEN TO ALL</span></div>
+      <section id="messages" class="messages" aria-live="polite" aria-label="Messages"><div class="loading-state">Connecting to the room…</div></section>
+      <div id="typing-line" class="typing-line" aria-live="polite"></div>
+      <form id="message-form" class="composer">
+        <button id="emoji-button" class="composer-tool" type="button" aria-label="Add a smile" title="Add a smile">☺</button>
+        <input id="message-input" maxlength="2000" autocomplete="off" placeholder="Write something thoughtful…" aria-label="Write a message" />
+        <span class="composer-hint">ENTER TO SEND</span>
+        <button id="send-button" class="send-button" type="submit" aria-label="Send message">↑</button>
+      </form>
+      <footer class="composer-footer"><span>Be kind. Be curious. Keep it constructive.</span><span>COMMONROOM <b>·</b> REAL-TIME CHAT</span></footer>
     </section>
     <div id="toast" class="toast" role="status"></div>
   </main>

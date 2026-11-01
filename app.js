@@ -13,7 +13,7 @@ const state = {
   name: storage.get("commonroom-name", ""),
   senderKey: storage.get("commonroom-guest-id", ""),
   rooms: [], activeRoom: null, messages: [], messageChannel: null,
-  typingChannel: null, presence: null, typingTimer: null, online: new Map(),
+  typingChannel: null, presence: null, typingTimer: null, online: new Map(), roomSwitchToken: 0,
   reactions: [], replyTarget: null,
   editTokens: (() => { try { return JSON.parse(storage.get("commonroom-edit-tokens", "{}")) || {}; } catch { return {}; } })(),
 };
@@ -92,8 +92,11 @@ async function waitForSubscription(channel) {
 async function selectRoom(roomId) {
   const room = state.rooms.find((item) => item.id === roomId);
   if (!room) return;
+  const switchToken = ++state.roomSwitchToken;
   if (state.messageChannel) await supabase.removeChannel(state.messageChannel);
+  if (switchToken !== state.roomSwitchToken) return;
   if (state.typingChannel) await supabase.removeChannel(state.typingChannel);
+  if (switchToken !== state.roomSwitchToken) return;
   state.activeRoom = room;
   setConnectionStatus("Connecting", "pending");
   state.messages = [];
@@ -108,23 +111,29 @@ async function selectRoom(roomId) {
   state.messageChannel.on("postgres_changes", {
     event: "INSERT", schema: "public", table: "chat_guest_messages", filter: `room_id=eq.${room.id}`
   }, ({ new: message }) => {
-    if (!state.messages.some((item) => item.id === message.id)) {
+    if (state.activeRoom?.id === room.id && !state.messages.some((item) => item.id === message.id)) {
       state.messages.push(message);
       state.messages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
       renderMessages();
     }
   });
   const messageReady = await waitForSubscription(state.messageChannel);
+  if (switchToken !== state.roomSwitchToken) return;
   setConnectionStatus(messageReady ? "Live" : "Reconnecting", messageReady ? "live" : "warning");
   if (!messageReady) toast("Live updates are taking longer than expected.");
 
   state.typingChannel = supabase.channel(`commonroom-typing:${room.id}`);
-  state.typingChannel.on("broadcast", { event: "typing" }, ({ payload }) => showTyping(payload));
+  state.typingChannel.on("broadcast", { event: "typing" }, ({ payload }) => {
+    if (state.activeRoom?.id === room.id) showTyping(payload);
+  });
   const typingReady = await waitForSubscription(state.typingChannel);
+  if (switchToken !== state.roomSwitchToken) return;
   if (!typingReady) console.warn("Typing channel unavailable.");
 
   await loadMessages(room.id);
-  await connectPresence(room.id);
+  if (switchToken !== state.roomSwitchToken) return;
+  await connectPresence(room.id, switchToken);
+  if (switchToken !== state.roomSwitchToken) return;
   setSidebarOpen(false);
 }
 async function loadMessages(roomId) {
@@ -158,16 +167,18 @@ function renderMessagesLegacy() {
   }).join("");
   container.scrollTop = container.scrollHeight;
 }
-async function connectPresence(roomId) {
+async function connectPresence(roomId, switchToken) {
   if (state.presence) await supabase.removeChannel(state.presence);
+  if (switchToken !== state.roomSwitchToken) return;
   state.online.clear();
-  state.presence = supabase.channel(`commonroom-presence:${roomId}`, { config: { presence: { key: state.senderKey } } });
-  state.presence.on("presence", { event: "sync" }, updateOnline);
-  state.presence.on("presence", { event: "join" }, updateOnline);
-  state.presence.on("presence", { event: "leave" }, updateOnline);
-  state.presence.subscribe(async (status) => {
-    if (status === "SUBSCRIBED") {
-      await state.presence.track({ guest_id: state.senderKey, name: state.name, online_at: new Date().toISOString() });
+  const presenceChannel = supabase.channel(`commonroom-presence:${roomId}`, { config: { presence: { key: state.senderKey } } });
+  state.presence = presenceChannel;
+  presenceChannel.on("presence", { event: "sync" }, updateOnline);
+  presenceChannel.on("presence", { event: "join" }, updateOnline);
+  presenceChannel.on("presence", { event: "leave" }, updateOnline);
+  presenceChannel.subscribe(async (status) => {
+    if (status === "SUBSCRIBED" && state.presence === presenceChannel && switchToken === state.roomSwitchToken) {
+      await presenceChannel.track({ guest_id: state.senderKey, name: state.name, online_at: new Date().toISOString() });
     }
   });
 }

@@ -614,7 +614,7 @@ async function adminClose() {
   if (adminUi.token) {
     const token = adminUi.token;
     adminUi.token = null; adminUi.data = null;
-    await supabase.rpc("admin_logout",{p_token:token}).catch(()=>{});
+    try { await supabase.rpc("admin_logout",{p_token:token}); } catch { /* Session expires server-side even if logout cannot reach the API. */ }
   }
   $("#admin-overlay").hidden = true;
   document.body.classList.remove("admin-open");
@@ -682,7 +682,13 @@ function adminRender() {
 }
 async function adminAction(name,args,successMessage) {
   const {data,error}=await supabase.rpc(name,{p_token:adminUi.token,...args});
-  if(error) { toast(error.message||"Admin action failed."); return false; }
+  if(error) {
+    if(error.code==="28000" || error.message?.toLowerCase().includes("session expired")) {
+      adminUi.token=null; adminUi.data=null; adminSetView(false);
+      $("#admin-login-error").textContent="Your admin session expired. Sign in again.";
+    }
+    toast(error.message||"Admin action failed."); return false;
+  }
   if(data!==true) { toast("The requested change was not applied."); return false; }
   toast(successMessage); await adminLoad(); return true;
 }

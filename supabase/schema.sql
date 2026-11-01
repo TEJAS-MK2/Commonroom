@@ -551,3 +551,11 @@ revoke all on function public.enforce_guest_report_limits() from public;
 drop trigger if exists chat_guest_report_rate_limit on public.chat_guest_reports;
 create trigger chat_guest_report_rate_limit before insert on public.chat_guest_reports
 for each row execute function public.enforce_guest_report_limits();
+
+-- Keep room pin updates synchronized to all connected guests.
+do $$
+begin
+  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='chat_guest_pins') then
+    alter publication supabase_realtime add table public.chat_guest_pins;
+  end if;
+end $$;

@@ -251,6 +251,8 @@ async function selectRoom(roomId) {
   await loadMessages();
 }
 async function loadMessages() {
+  const targetRoomId = state.activeRoom?.id || null;
+  const targetConversationId = state.activeConversation?.id || null;
   $("#messages").innerHTML = '<div class="loading-state">Loading conversation…</div>';
   const table = state.activeConversation ? "chat_direct_messages" : "chat_messages";
   const foreign = "chat_profiles(display_name, avatar_url)";
@@ -260,6 +262,7 @@ async function loadMessages() {
     : query.eq("room_id", state.activeRoom.id);
   const { data, error } = await query.order("created_at", { ascending: false }).limit(100);
   if (error) { $("#messages").innerHTML = '<div class="empty-state"><h3>Could not load messages.</h3><p>Check your Supabase setup and refresh.</p></div>'; throw error; }
+  if (targetRoomId !== (state.activeRoom?.id || null) || targetConversationId !== (state.activeConversation?.id || null)) return;
   const fromDatabase = (data || []).reverse().map((message) => ({
     ...message, profile: message.chat_profiles,
     sender_name: message.chat_profiles?.display_name || "Member"

@@ -293,3 +293,14 @@ create index if not exists chat_conversations_participant_b_idx
   on public.chat_conversations (participant_b);
 create index if not exists chat_direct_messages_sender_idx
   on public.chat_direct_messages (sender_id);
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'chat_direct_messages'
+  ) then
+    alter publication supabase_realtime add table public.chat_direct_messages;
+  end if;
+end $$;

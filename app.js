@@ -54,7 +54,7 @@ authForm.addEventListener("submit", async (event) => {
   try {
     if (state.isSignUp) {
       if (displayName.length < 2) throw new Error("Choose a display name with at least 2 characters.");
-      const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { display_name: displayName } } });
+      const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { display_name: displayName }, emailRedirectTo: window.location.origin + window.location.pathname } });
       if (error) throw error;
       if (!data.session) {
         setAuthMessage("Check your inbox to confirm your email, then come back to sign in.");

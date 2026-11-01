@@ -123,7 +123,8 @@ async function selectRoom(roomId) {
   messageInput.placeholder = `Message #${room.name}`;
   renderRooms();
   await loadMessages();
-  state.channel = supabase.channel(`chat-room:${room.id}`)
+  await supabase.realtime.setAuth();
+  state.channel = supabase.channel(`chat-room:${room.id}`, { config: { private: true } })
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `room_id=eq.${room.id}` }, (payload) => {
       if (!state.messages.some((message) => message.id === payload.new.id)) {
         state.messages.push(payload.new);
@@ -170,7 +171,8 @@ function renderMessages() {
 }
 async function connectPresence() {
   if (state.presence) await supabase.removeChannel(state.presence);
-  state.presence = supabase.channel("chat-presence", { config: { presence: { key: state.user.id } } });
+  await supabase.realtime.setAuth();
+  state.presence = supabase.channel("chat-presence", { config: { private: true, presence: { key: state.user.id } } });
   state.presence.on("presence", { event: "sync" }, updateOnline);
   state.presence.on("presence", { event: "join" }, updateOnline);
   state.presence.on("presence", { event: "leave" }, updateOnline);

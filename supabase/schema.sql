@@ -454,3 +454,79 @@ revoke all on function public.edit_guest_message(uuid,text,text) from public;
 revoke all on function public.delete_guest_message(uuid,text) from public;
 grant execute on function public.edit_guest_message(uuid,text,text) to anon, authenticated;
 grant execute on function public.delete_guest_message(uuid,text) to anon, authenticated;
+
+-- Reports and moderation restrictions are server-managed; clients cannot read or mutate these tables.
+create table if not exists public.chat_guest_reports (
+  id uuid primary key default gen_random_uuid(),
+  message_id uuid not null references public.chat_guest_messages(id) on delete cascade,
+  reporter_key uuid not null,
+  reason text not null check (reason in ('spam','harassment','hate','personal-info','other')),
+  details text not null default '',
+  status text not null default 'open' check (status in ('open','reviewed','dismissed')),
+  created_at timestamptz not null default now(),
+  unique(message_id, reporter_key)
+);
+create index if not exists chat_guest_reports_status_created_idx on public.chat_guest_reports(status, created_at desc);
+alter table public.chat_guest_reports enable row level security;
+revoke all on public.chat_guest_reports from anon, authenticated;
+
+create table if not exists public.chat_guest_moderation_blocks (
+  sender_key uuid primary key,
+  reason text not null default 'Community guidelines',
+  created_at timestamptz not null default now(),
+  expires_at timestamptz
+);
+alter table public.chat_guest_moderation_blocks enable row level security;
+revoke all on public.chat_guest_moderation_blocks from anon, authenticated;
+
+drop policy if exists "Guests can pin public room messages" on public.chat_guest_pins;
+drop policy if exists "Guests can unpin public room messages" on public.chat_guest_pins;
+revoke insert, delete on public.chat_guest_pins from anon, authenticated;
+grant select on public.chat_guest_pins to anon, authenticated;
+
+create or replace function public.enforce_guest_chat_limits()
+returns trigger language plpgsql set search_path = pg_catalog, public as $$
+declare recent_count integer;
+begin
+  new.created_at := now();
+  perform pg_advisory_xact_lock(hashtext(new.sender_key::text));
+  if exists (select 1 from public.chat_guest_moderation_blocks
+    where sender_key = new.sender_key and (expires_at is null or expires_at > now())) then
+    raise exception 'This guest is restricted from posting in this community.' using errcode = '42501';
+  end if;
+  select count(*) into recent_count from public.chat_guest_messages
+    where sender_key = new.sender_key and created_at > now() - interval '15 seconds';
+  if recent_count >= 5 then
+    raise exception 'You are sending messages too quickly. Please wait a moment.' using errcode = 'P0001';
+  end if;
+  if exists (select 1 from public.chat_guest_messages
+    where sender_key = new.sender_key and lower(btrim(body)) = lower(btrim(new.body))
+      and created_at > now() - interval '60 seconds') then
+    raise exception 'Please avoid sending the same message repeatedly.' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.enforce_guest_chat_limits() from public;
+drop trigger if exists chat_guest_message_rate_limit on public.chat_guest_messages;
+create trigger chat_guest_message_rate_limit before insert on public.chat_guest_messages
+for each row execute function public.enforce_guest_chat_limits();
+
+create or replace function public.enforce_guest_reaction_limits()
+returns trigger language plpgsql set search_path = pg_catalog, public as $$
+declare recent_count integer;
+begin
+  new.created_at := now();
+  perform pg_advisory_xact_lock(hashtext(new.sender_key::text));
+  select count(*) into recent_count from public.chat_guest_reactions
+    where sender_key = new.sender_key and created_at > now() - interval '15 seconds';
+  if recent_count >= 20 then
+    raise exception 'You are reacting too quickly. Please wait a moment.' using errcode = 'P0001';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function public.enforce_guest_reaction_limits() from public;
+drop trigger if exists chat_guest_reaction_rate_limit on public.chat_guest_reactions;
+create trigger chat_guest_reaction_rate_limit before insert on public.chat_guest_reactions
+for each row execute function public.enforce_guest_reaction_limits();

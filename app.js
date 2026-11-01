@@ -3,7 +3,7 @@ import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabase/config.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 const $ = (selector) => document.querySelector(selector);
-const state = { user: null, profile: null, rooms: [], activeRoom: null, messages: [], channel: null, presence: null, typingTimer: null, isSignUp: false, online: new Map() };
+const state = { user: null, profile: null, rooms: [], activeRoom: null, messages: [], channel: null, typingChannel: null, presence: null, typingTimer: null, isSignUp: false, online: new Map() };
 
 const authScreen = $("#auth-screen");
 const chatScreen = $("#chat-screen");
@@ -113,35 +113,59 @@ function renderRooms() {
     </button>`).join("");
   $("#room-list").querySelectorAll("[data-room]").forEach((button) => button.addEventListener("click", () => selectRoom(button.dataset.room)));
 }
+async function waitForSubscription(channel) {
+  return new Promise((resolve) => {
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED") resolve(true);
+      if (["CHANNEL_ERROR", "TIMED_OUT", "CLOSED"].includes(status)) resolve(false);
+    });
+  });
+}
 async function selectRoom(roomId) {
   const room = state.rooms.find((item) => item.id === roomId);
   if (!room) return;
   if (state.channel) { await supabase.removeChannel(state.channel); state.channel = null; }
+  if (state.typingChannel) { await supabase.removeChannel(state.typingChannel); state.typingChannel = null; }
   state.activeRoom = room;
+  state.messages = [];
   $("#active-room-name").textContent = room.name;
   $("#room-description").textContent = room.description || "A place to talk.";
   messageInput.placeholder = `Message #${room.name}`;
   renderRooms();
-  await loadMessages();
+  $("#messages").innerHTML = '<div class="loading-state">Loading conversation…</div>';
+
+  // Postgres Changes uses a public channel; row visibility is still enforced by
+  // the chat_messages SELECT policy. Broadcast typing uses a separate private channel.
+  state.channel = supabase.channel(`chat-db:${room.id}`);
+  state.channel.on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `room_id=eq.${room.id}` }, (payload) => {
+    if (!state.messages.some((message) => message.id === payload.new.id)) {
+      state.messages.push(payload.new);
+      renderMessages();
+      loadSenderForMessage(payload.new);
+    }
+  });
+  const dbReady = await waitForSubscription(state.channel);
+  if (!dbReady) toast("Live message updates could not connect. Check your Realtime settings.");
+
   await supabase.realtime.setAuth();
-  state.channel = supabase.channel(`chat-room:${room.id}`, { config: { private: true } })
-    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages", filter: `room_id=eq.${room.id}` }, (payload) => {
-      if (!state.messages.some((message) => message.id === payload.new.id)) {
-        state.messages.push(payload.new);
-        renderMessages();
-        loadSenderForMessage(payload.new);
-      }
-    })
-    .on("broadcast", { event: "typing" }, ({ payload }) => showTyping(payload))
-    .subscribe();
+  state.typingChannel = supabase.channel(`chat-room:${room.id}`, { config: { private: true } });
+  state.typingChannel.on("broadcast", { event: "typing" }, ({ payload }) => showTyping(payload));
+  const typingReady = await waitForSubscription(state.typingChannel);
+  if (!typingReady) toast("Typing indicators are temporarily unavailable.");
+
+  await loadMessages();
 }
 async function loadMessages() {
   $("#messages").innerHTML = '<div class="loading-state">Loading conversation…</div>';
   const { data, error } = await supabase.from("chat_messages")
     .select("id, room_id, sender_id, body, created_at, chat_profiles(display_name, avatar_url)")
-    .eq("room_id", state.activeRoom.id).order("created_at", { ascending: true }).limit(100);
+    .eq("room_id", state.activeRoom.id).order("created_at", { ascending: false }).limit(100);
   if (error) { $("#messages").innerHTML = '<div class="empty-state"><h3>Could not load messages.</h3><p>Check your Supabase setup and refresh.</p></div>'; throw error; }
-  state.messages = (data || []).map((message) => ({ ...message, profile: message.chat_profiles, sender_name: message.chat_profiles?.display_name || "Member" }));
+  const fromDatabase = (data || []).reverse().map((message) => ({ ...message, profile: message.chat_profiles, sender_name: message.chat_profiles?.display_name || "Member" }));
+  const merged = new Map(fromDatabase.map((message) => [message.id, message]));
+  // Preserve inserts received while the initial history query was in flight.
+  for (const message of state.messages) if (!merged.has(message.id)) merged.set(message.id, message);
+  state.messages = [...merged.values()].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   renderMessages();
 }
 async function loadSenderForMessage(message) {
@@ -196,7 +220,7 @@ function showTyping(payload) {
 }
 messageInput.addEventListener("input", () => {
   if (!state.channel || !messageInput.value.trim()) return;
-  state.channel.send({ type: "broadcast", event: "typing", payload: { user_id: state.user.id, name: state.profile.display_name } });
+  state.typingChannel?.send({ type: "broadcast", event: "typing", payload: { user_id: state.user.id, name: state.profile.display_name } });
 });
 $("#message-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -222,6 +246,7 @@ $("#new-room").addEventListener("click", async () => {
 });
 $("#sign-out").addEventListener("click", async () => {
   if (state.channel) await supabase.removeChannel(state.channel);
+  if (state.typingChannel) await supabase.removeChannel(state.typingChannel);
   if (state.presence) await supabase.removeChannel(state.presence);
   await supabase.auth.signOut(); state.user = null; state.profile = null; state.activeRoom = null; showApp(false);
 });

@@ -485,3 +485,117 @@ for each row execute function public.enforce_guest_reaction_limits();
 
 -- Current deployed anti-abuse hardening.
 create index if not exists chat_guest_messages_reply_to_idx on public.chat_guest_messages(reply_to);
+
+-- Private moderation reports. This table intentionally has no public policies or grants.
+create table if not exists public.chat_guest_reports (
+  id uuid primary key default gen_random_uuid(),
+  message_id uuid not null references public.chat_guest_messages(id) on delete cascade,
+  reporter_key uuid not null,
+  reason text not null check (reason in ('spam','harassment','hate','personal-info','other')),
+  details text not null default '',
+  status text not null default 'open' check (status in ('open','reviewed','dismissed')),
+  created_at timestamptz not null default now()
+);
+create index if not exists chat_guest_reports_status_created_idx
+  on public.chat_guest_reports(status, created_at desc);
+alter table public.chat_guest_reports enable row level security;
+
+-- Public mutation hardening: reactions require a private owner token hash.
+alter table public.chat_guest_reactions add column if not exists reaction_token_hash text;
+drop policy if exists "Guests can remove their own chat reactions" on public.chat_guest_reactions;
+drop policy if exists "Guests can add their own chat reactions" on public.chat_guest_reactions;
+create policy "Guests can add token-owned chat reactions"
+  on public.chat_guest_reactions for insert to anon, authenticated
+  with check (reaction_token_hash ~ '^[a-f0-9]{64}$');
+create or replace function public.delete_guest_reaction(p_reaction_id uuid, p_token text)
+returns boolean language plpgsql security definer set search_path = pg_catalog, public as $$
+declare changed integer;
+begin
+  if p_token is null or length(p_token) < 32 then return false; end if;
+  delete from public.chat_guest_reactions where id = p_reaction_id
+    and reaction_token_hash = encode(sha256(convert_to(p_token, 'UTF8')), 'hex');
+  get diagnostics changed = row_count;
+  return changed = 1;
+end;
+$$;
+revoke all on function public.delete_guest_reaction(uuid,text) from public;
+grant execute on function public.delete_guest_reaction(uuid,text) to anon, authenticated;
+
+revoke all on public.chat_guest_messages, public.chat_guest_reactions, public.chat_rooms from anon, authenticated;
+grant select, insert on public.chat_guest_messages to anon, authenticated;
+grant select, insert on public.chat_guest_reactions to anon, authenticated;
+grant select, insert on public.chat_rooms to anon, authenticated;
+
+create or replace function public.enforce_guest_room_creation_limits()
+returns trigger language plpgsql set search_path = pg_catalog, public as $$
+declare recent_count integer;
+declare total_count integer;
+begin
+  perform pg_advisory_xact_lock(73190517);
+  select count(*) into total_count from public.chat_rooms;
+  if total_count >= 100 then raise exception 'This community has reached its room limit.' using errcode = 'P0001'; end if;
+  select count(*) into recent_count from public.chat_rooms
+   where created_at > now() - interval '1 minute';
+  if recent_count >= 5 then raise exception 'Too many rooms were created recently. Please try again shortly.' using errcode = 'P0001'; end if;
+  new.created_at := now();
+  return new;
+end;
+$$;
+revoke all on function public.enforce_guest_room_creation_limits() from public;
+drop trigger if exists chat_guest_room_creation_limit on public.chat_rooms;
+create trigger chat_guest_room_creation_limit before insert on public.chat_rooms
+for each row execute function public.enforce_guest_room_creation_limits();
+
+
+-- Mirrors production migration 20261101175421_rate_limit_public_chat_by_ip.sql.
+-- Per-IP request guard for public Commonroom mutations. The hook is scoped to
+-- chat REST/RPC paths so other applications sharing this Supabase project are unaffected.
+create schema if not exists private;
+revoke all on schema private from public, anon, authenticated;
+create table if not exists private.chat_guest_rate_limits (
+  id bigint generated always as identity primary key,
+  client_ip inet not null,
+  requested_at timestamptz not null default now(),
+  request_path text not null
+);
+create index if not exists chat_guest_rate_limits_ip_time_idx
+  on private.chat_guest_rate_limits(client_ip, requested_at desc);
+alter table private.chat_guest_rate_limits enable row level security;
+revoke all on private.chat_guest_rate_limits from public, anon, authenticated;
+
+create or replace function public.enforce_chat_api_rate_limit()
+returns void language plpgsql security definer
+set search_path = pg_catalog, private, public as $$
+declare
+  req_method text := current_setting('request.method', true);
+  req_path text := current_setting('request.path', true);
+  req_headers jsonb := nullif(current_setting('request.headers', true), '')::jsonb;
+  req_ip inet;
+  recent_count integer;
+begin
+  if req_method is null or req_method in ('GET', 'HEAD', 'OPTIONS') then return; end if;
+  if not (
+    req_path ~ '(^|/)chat_guest_(messages|reactions|rooms)(/|$)'
+    or req_path ~ '(^|/)chat_rooms(/|$)'
+    or req_path ~ '(^|/)rpc/(delete_guest_reaction|edit_guest_message|delete_guest_message)$'
+  ) then return; end if;
+  req_ip := nullif(split_part(coalesce(req_headers->>'x-forwarded-for', ''), ',', 1), '')::inet;
+  if req_ip is null then return; end if;
+  perform pg_advisory_xact_lock(hashtext(req_ip::text));
+  select count(*) into recent_count from private.chat_guest_rate_limits
+   where client_ip = req_ip and requested_at > now() - interval '5 minutes';
+  if recent_count >= 100 then
+    raise sqlstate 'PGRST' using
+      message = json_build_object('message', 'Commonroom is receiving too many requests from this network. Please wait a few minutes.')::text,
+      detail = json_build_object('status', 429, 'status_text', 'Too Many Requests')::text;
+  end if;
+  insert into private.chat_guest_rate_limits(client_ip, request_path)
+  values (req_ip, coalesce(req_path, 'unknown'));
+  delete from private.chat_guest_rate_limits
+   where client_ip = req_ip and requested_at < now() - interval '1 day';
+end;
+$$;
+revoke all on function public.enforce_chat_api_rate_limit() from public, anon, authenticated;
+grant execute on function public.enforce_chat_api_rate_limit() to authenticator;
+alter role authenticator set pgrst.db_pre_request = 'public.enforce_chat_api_rate_limit';
+notify pgrst, 'reload config';

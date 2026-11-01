@@ -230,10 +230,6 @@ $("#message-form").addEventListener("submit", async (event) => {
     toast(error.message || "Your message could not be sent.");
   } finally { button.disabled = false; }
 });
-$("#emoji-button").addEventListener("click", () => {
-  const input = $("#message-input");
-  input.value += " 🙂"; input.focus(); input.dispatchEvent(new Event("input"));
-});
 $("#new-room").addEventListener("click", async () => {
   const raw = window.prompt("Name your new public room (letters, numbers and hyphens):");
   if (!raw) return;
@@ -285,6 +281,8 @@ catch (error) {
 const reactionEmojis = ["👍","❤️","😂","🎉","🔥","👀","🙌","🤔"];
 const pickerEmojis = ["😀","😄","😁","😂","🥹","😊","😍","🤔","😎","😭","🥳","🤯","👍","👎","👏","🙌","🙏","❤️","💚","🔥","✨","🎉","🚀","👀","💯","☕","💻","🧠","⚡","🌱","🎯","🫡"];
 state.reactions = state.reactions || [];
+try { state.reactionTokens = JSON.parse(storage.get("commonroom-reaction-tokens", "{}")) || {}; }
+catch { state.reactionTokens = {}; }
 state.reactionChannel = null;
 state.pickerTarget = null;
 
@@ -334,16 +332,30 @@ function renderMessagesReactions() {
 async function toggleReaction(messageId, emoji) {
   if (!reactionEmojis.includes(emoji)) return;
   const current = state.reactions.find((item) => item.message_id === messageId && item.sender_key === state.senderKey && item.emoji === emoji);
+  const tokenKey = messageId + ":" + emoji;
   if (current) {
-    const result = await supabase.from("chat_guest_reactions").delete().eq("id", current.id).eq("sender_key", state.senderKey);
-    if (result.error) throw result.error;
+    const token = state.reactionTokens[tokenKey];
+    if (!token) {
+      toast("This older reaction has no saved removal token on this device.");
+      return;
+    }
+    const { data, error } = await supabase.rpc("delete_guest_reaction", { p_reaction_id: current.id, p_token: token });
+    if (error || data !== true) throw error || new Error("This reaction can no longer be removed from this device.");
+    delete state.reactionTokens[tokenKey];
+    storage.set("commonroom-reaction-tokens", JSON.stringify(state.reactionTokens));
     state.reactions = state.reactions.filter((item) => item.id !== current.id);
   } else {
+    const token = createEditToken();
     const result = await supabase.from("chat_guest_reactions").insert({
-      message_id: messageId, sender_key: state.senderKey, emoji: emoji
+      message_id: messageId, sender_key: state.senderKey, emoji,
+      reaction_token_hash: await hashEditToken(token)
     }).select("id,message_id,sender_key,emoji").single();
     if (result.error && result.error.code !== "23505") throw result.error;
-    if (result.data && !state.reactions.some((item) => item.id === result.data.id)) state.reactions.push(result.data);
+    if (result.data) {
+      state.reactionTokens[tokenKey] = token;
+      storage.set("commonroom-reaction-tokens", JSON.stringify(state.reactionTokens));
+      if (!state.reactions.some((item) => item.id === result.data.id)) state.reactions.push(result.data);
+    }
   }
   renderMessages();
 }
@@ -454,6 +466,15 @@ $("#emoji-button").addEventListener("click", (event) => {
   openEmojiPicker({ kind: "composer", id: "composer" }, event.currentTarget);
 });
 window.addEventListener("resize", closePopovers);
+/* Layout follows the live viewport rather than a user-agent guess. */
+const mobileLayoutQuery = window.matchMedia("(max-width: 700px)");
+const tabletLayoutQuery = window.matchMedia("(min-width: 701px) and (max-width: 1100px)");
+function syncResponsiveLayout() {
+  document.documentElement.dataset.layout = mobileLayoutQuery.matches ? "mobile" : tabletLayoutQuery.matches ? "tablet" : "desktop";
+}
+mobileLayoutQuery.addEventListener("change", syncResponsiveLayout);
+tabletLayoutQuery.addEventListener("change", syncResponsiveLayout);
+syncResponsiveLayout();
 
 /* Threads and owner-token message editing/deletion. */
 state.replyTarget = null;
@@ -510,8 +531,8 @@ selectRoom = async function(roomId) {
   if (state.controlChannel) await supabase.removeChannel(state.controlChannel);
   state.controlChannel = null;
   await selectRoomWithThreads(roomId);
+  if (state.activeRoom?.id !== roomId) return;
   clearReplyTarget();
-  if (!state.activeRoom) return;
   const syncChannel = supabase.channel("commonroom-message-controls:" + roomId)
     .on("postgres_changes", { event: "*", schema: "public", table: "chat_guest_messages", filter: "room_id=eq." + roomId }, (payload) => {
       if (payload.eventType === "UPDATE") state.messages = state.messages.map((item) => item.id === payload.new.id ? { ...item, ...payload.new } : item);

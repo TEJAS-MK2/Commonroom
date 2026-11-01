@@ -25,6 +25,8 @@ jobs:
           node-version: 22
       - name: Validate JavaScript module syntax
         run: node --input-type=module --check < app.js
+      - name: Run security and responsive smoke checks
+        run: node tests/smoke.mjs
       - name: Scan browser assets for privileged Supabase keys
         run: |
           if grep -En 'sb_secret_|SUPABASE_SERVICE_ROLE|service_role:' app.js index.html styles.css; then

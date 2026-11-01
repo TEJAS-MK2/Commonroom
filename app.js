@@ -547,6 +547,7 @@ $("#messages").addEventListener("click", async (event) => {
     if (error) toast(error.message || "Could not update pinned message.");
     else {
       const result = await supabase.from("chat_guest_pins").select("room_id,message_id,pinned_by,created_at").eq("room_id", state.activeRoom.id).maybeSingle();
+      if (result.error) throw result.error;
       state.pinned = result.data || null; renderMessages(); toast(action === "pin-message" ? "Message pinned for this room." : "Pin removed.");
     }
     return;
@@ -603,7 +604,7 @@ async function openModerator() {
     try { sessionStorage.setItem("commonroom-moderator-key", key); } catch {}
   }
   $("#moderator-panel").hidden = false;
-  await refreshModerationQueue();
+  try { await refreshModerationQueue(); } catch (error) { toast(error.message || "Moderation centre could not load."); lockModerator(); }
 }
 $("#moderator-open").addEventListener("click", openModerator);
 $("#moderator-close").addEventListener("click", () => { $("#moderator-panel").hidden = true; });

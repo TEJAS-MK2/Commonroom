@@ -406,3 +406,51 @@ begin
     alter publication supabase_realtime add table public.chat_guest_reactions;
   end if;
 end $$;
+
+-- Message replies, client-held owner tokens, and one pinned message per room.
+alter table public.chat_guest_messages
+  add column if not exists reply_to uuid references public.chat_guest_messages(id) on delete set null,
+  add column if not exists edited_at timestamptz,
+  add column if not exists edit_token_hash text;
+
+create table if not exists public.chat_guest_pins (
+  room_id uuid primary key references public.chat_rooms(id) on delete cascade,
+  message_id uuid not null unique references public.chat_guest_messages(id) on delete cascade,
+  pinned_by uuid not null,
+  created_at timestamptz not null default now()
+);
+alter table public.chat_guest_pins enable row level security;
+drop policy if exists "Anyone can view public room pins" on public.chat_guest_pins;
+create policy "Anyone can view public room pins" on public.chat_guest_pins for select to anon, authenticated using (true);
+drop policy if exists "Guests can pin public room messages" on public.chat_guest_pins;
+create policy "Guests can pin public room messages" on public.chat_guest_pins for insert to anon, authenticated with check (true);
+drop policy if exists "Guests can unpin public room messages" on public.chat_guest_pins;
+create policy "Guests can unpin public room messages" on public.chat_guest_pins for delete to anon, authenticated using (true);
+grant select, insert, delete on public.chat_guest_pins to anon, authenticated;
+
+create or replace function public.edit_guest_message(p_message_id uuid, p_token text, p_body text)
+returns boolean language plpgsql security definer set search_path = pg_catalog, public as $$
+declare changed integer;
+begin
+  if p_token is null or length(p_token) < 32 or p_body is null or length(btrim(p_body)) < 1 or length(p_body) > 2000 then return false; end if;
+  update public.chat_guest_messages set body = btrim(p_body), edited_at = now()
+  where id = p_message_id and edit_token_hash = encode(sha256(convert_to(p_token, 'UTF8')), 'hex');
+  get diagnostics changed = row_count;
+  return changed = 1;
+end;
+$$;
+create or replace function public.delete_guest_message(p_message_id uuid, p_token text)
+returns boolean language plpgsql security definer set search_path = pg_catalog, public as $$
+declare changed integer;
+begin
+  if p_token is null or length(p_token) < 32 then return false; end if;
+  delete from public.chat_guest_messages where id = p_message_id
+  and edit_token_hash = encode(sha256(convert_to(p_token, 'UTF8')), 'hex');
+  get diagnostics changed = row_count;
+  return changed = 1;
+end;
+$$;
+revoke all on function public.edit_guest_message(uuid,text,text) from public;
+revoke all on function public.delete_guest_message(uuid,text) from public;
+grant execute on function public.edit_guest_message(uuid,text,text) to anon, authenticated;
+grant execute on function public.delete_guest_message(uuid,text) to anon, authenticated;

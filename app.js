@@ -262,7 +262,7 @@ function reactionMarkup(messageId) {
     '<button class="reaction-chip ' + (item.mine ? "reacted" : "") + '" type="button" data-react="' + emoji + '" data-message="' + messageId + '" aria-pressed="' + item.mine + '"><span>' + emoji + '</span><span>' + item.count + '</span></button>'
   ).join("");
 }
-function renderMessages() {
+function renderMessagesReactions() {
   const container = $("#messages");
   if (!state.messages.length) {
     container.innerHTML = '<div class="empty-state"><div class="empty-illustration">✳</div><span class="empty-kicker">A FRESH START</span><h2>It’s quiet in here.</h2><p>Be the first to say hello and set the tone.</p></div>';

@@ -504,8 +504,8 @@ $("#messages").addEventListener("click", async (event) => {
     const message = state.messages.find((item) => item.id === edit.dataset.edit);
     const next = window.prompt("Edit your message:", message?.body || "");
     if (next === null || !next.trim()) return;
-    const { data, error } = await supabase.rpc("edit_guest_message", { p_message_id: edit.dataset.edit, p_token: state.editTokens[edit.dataset.edit], p_body: next.trim() });
-    if (error || data !== true) toast(error?.message || "This message can no longer be edited on this device.");
+    const { data, error } = await supabase.functions.invoke("chat-moderation", { body: { action: "edit-own-message", message_id: edit.dataset.edit, owner_token: state.editTokens[edit.dataset.edit], body: next.trim() } });
+    if (error || data?.error || !data?.ok) toast(error?.message || data?.error || "This message can no longer be edited on this device.");
     else {
       state.messages = state.messages.map((item) => item.id === edit.dataset.edit ? { ...item, body: next.trim(), edited_at: new Date().toISOString() } : item);
       renderMessages(); toast("Message updated.");
@@ -516,8 +516,8 @@ $("#messages").addEventListener("click", async (event) => {
   if (del) {
     if (!window.confirm("Delete this message? This cannot be undone.")) return;
     const id = del.dataset.delete;
-    const { data, error } = await supabase.rpc("delete_guest_message", { p_message_id: id, p_token: state.editTokens[id] });
-    if (error || data !== true) toast(error?.message || "This message cannot be deleted on this device.");
+    const { data, error } = await supabase.functions.invoke("chat-moderation", { body: { action: "delete-own-message", message_id: id, owner_token: state.editTokens[id] } });
+    if (error || data?.error || !data?.ok) toast(error?.message || data?.error || "This message cannot be deleted on this device.");
     else {
       delete state.editTokens[id]; storage.set("commonroom-edit-tokens", JSON.stringify(state.editTokens));
       state.messages = state.messages.filter((item) => item.id !== id); renderMessages(); toast("Message deleted.");

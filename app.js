@@ -371,6 +371,7 @@ selectRoom = async function(roomId) {
   state.reactionChannel = null;
   state.reactions = [];
   await originalSelectRoom(roomId);
+  if (state.activeRoom?.id !== roomId) return;
   const room = state.activeRoom;
   if (!room) return;
   const messageIds = state.messages.map((message) => message.id);
@@ -431,7 +432,9 @@ $("#profile-popover").addEventListener("click", (event) => {
       try {
         const clean = next.trim().replace(/\s+/g, " ").slice(0, 32);
         if (clean.length < 2) throw new Error("Your display name needs at least 2 characters.");
-        setName(clean); toast("Display name updated.");
+        setName(clean);
+        state.presence?.track({ guest_id: state.senderKey, name: state.name, online_at: new Date().toISOString() });
+        toast("Display name updated.");
       } catch (error) { toast(error.message); }
     }
   }

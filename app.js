@@ -406,7 +406,7 @@ window.addEventListener("resize", closePopovers);
 /* Threads, owner-token message editing/deletion, and room pins. */
 state.pinned = null;
 state.replyTarget = null;
-state.editTokens = state.editTokens || {};
+try { state.editTokens = JSON.parse(storage.get("commonroom-edit-tokens", "{}")) || {}; } catch { state.editTokens = {}; }
 function createEditToken() {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");

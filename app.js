@@ -582,6 +582,11 @@ async function refreshModerationQueue() {
       (message ? '<button type="button" data-mod-delete="' + message.id + '">Remove message</button><button type="button" data-mod-ban="' + message.sender_key + '">Restrict guest</button>' : '') +
       '<button type="button" data-mod-resolve="' + report.id + '" data-status="reviewed">Mark reviewed</button><button type="button" data-mod-resolve="' + report.id + '" data-status="dismissed">Dismiss</button></div></article>';
   }).join("") : '<div class="moderator-empty">All clear. No open reports right now.</div>';
+  const blocksResult = await moderationRequest({ action: "list-blocks" });
+  if (blocksResult.error) throw blocksResult.error;
+  $("#moderator-block-list").innerHTML = (blocksResult.data.blocks || []).length
+    ? blocksResult.data.blocks.map((item) => '<div class="moderator-block-row"><span><strong>' + escapeHtml(item.sender_key.slice(0, 13)) + '…</strong><small>' + escapeHtml(item.reason) + '</small></span><button type="button" data-mod-unban="' + item.sender_key + '">Restore access</button></div>').join("")
+    : '<div class="moderator-empty compact">No restricted guest keys.</div>';
   $("#moderator-open").textContent = "Moderation · Active";
   renderMessages();
 }
@@ -604,8 +609,12 @@ $("#moderator-reports").addEventListener("click", async (event) => {
   const remove = event.target.closest("[data-mod-delete]");
   const ban = event.target.closest("[data-mod-ban]");
   const resolve = event.target.closest("[data-mod-resolve]");
+  const unban = event.target.closest("[data-mod-unban]");
   let result;
-  if (remove) {
+  if (unban) {
+    if (!confirm("Restore posting access for this guest key?")) return;
+    result = await moderationRequest({ action: "unban-guest", sender_key: unban.dataset.modUnban });
+  } else if (remove) {
     if (!confirm("Permanently remove this reported message?")) return;
     result = await moderationRequest({ action: "delete-message", message_id: remove.dataset.modDelete });
   } else if (ban) {

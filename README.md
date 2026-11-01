@@ -42,3 +42,10 @@ Because there is no account identity, this version does not offer private DMs or
 ## Deployment
 
 GitHub Actions validates JavaScript module syntax, checks required HTML IDs, verifies that no privileged Supabase key is included in the browser configuration, and deploys the static site to GitHub Pages on pushes to `main`.
+
+## Message controls
+
+- Reply to a message to create a lightweight threaded conversation in the room.
+- Pin one message per room for everyone to see.
+- Edit or delete messages from the browser that originally posted them. Each message receives a random 256-bit owner token; only its SHA-256 hash is stored in the database. Clearing browser storage or switching devices means that browser can no longer manage that message.
+- Guest chat is public and anonymous. Display names and sender identities are not verified; use moderation and rate limiting before opening this community to a large audience.

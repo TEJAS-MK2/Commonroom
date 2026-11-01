@@ -3,7 +3,7 @@ import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabase/config.js";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 const $ = (selector) => document.querySelector(selector);
-const state = { user: null, profile: null, rooms: [], activeRoom: null, messages: [], channel: null, typingChannel: null, presence: null, typingTimer: null, isSignUp: false, online: new Map() };
+const state = { user: null, profile: null, rooms: [], profiles: [], activeRoom: null, activeConversation: null, activePeer: null, messages: [], channel: null, typingChannel: null, presence: null, typingTimer: null, isSignUp: false, online: new Map() };
 
 const authScreen = $("#auth-screen");
 const chatScreen = $("#chat-screen");
@@ -90,6 +90,7 @@ async function startApp(user) {
   $("#my-avatar").textContent = initials(state.profile.display_name);
   showApp(true);
   await loadRooms();
+  await loadProfiles();
   await connectPresence();
 }
 async function loadRooms() {
@@ -113,6 +114,96 @@ function renderRooms() {
     </button>`).join("");
   $("#room-list").querySelectorAll("[data-room]").forEach((button) => button.addEventListener("click", () => selectRoom(button.dataset.room)));
 }
+async function loadProfiles() {
+  const { data, error } = await supabase.from("chat_profiles")
+    .select("id, display_name, avatar_url").neq("id", state.user.id).order("display_name");
+  if (error) throw error;
+  state.profiles = data || [];
+  renderDirectMessages();
+}
+function renderDirectMessages() {
+  const list = $("#direct-list");
+  if (!list) return;
+  if (!state.profiles.length) {
+    list.innerHTML = '<p class="direct-empty">No other members yet</p>';
+    return;
+  }
+  list.innerHTML = state.profiles.map((profile) => `
+    <button class="direct-item ${state.activePeer?.id === profile.id ? "active" : ""}" data-dm="${profile.id}">
+      <span class="direct-avatar">${escapeHtml(initials(profile.display_name))}</span>
+      <span>${escapeHtml(profile.display_name)}</span>
+    </button>`).join("");
+  list.querySelectorAll("[data-dm]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const profile = state.profiles.find((item) => item.id === button.dataset.dm);
+      if (profile) selectDirectMessage(profile).catch((error) => toast(error.message));
+    });
+  });
+}
+async function selectDirectMessage(profile) {
+  let { data: conversation, error } = await supabase.from("chat_conversations").select("*")
+    .eq("participant_a", state.user.id).eq("participant_b", profile.id).maybeSingle();
+  if (error) throw error;
+  if (!conversation) {
+    const reverse = await supabase.from("chat_conversations").select("*")
+      .eq("participant_a", profile.id).eq("participant_b", state.user.id).maybeSingle();
+    if (reverse.error) throw reverse.error;
+    conversation = reverse.data;
+  }
+  if (!conversation) {
+    const created = await supabase.from("chat_conversations").insert({
+      participant_a: state.user.id, participant_b: profile.id, created_by: state.user.id
+    }).select().single();
+    if (created.error) {
+      if (created.error.code !== "23505") throw created.error;
+      const retry = await supabase.from("chat_conversations").select("*")
+        .eq("participant_a", state.user.id).eq("participant_b", profile.id).maybeSingle();
+      if (retry.error || !retry.data) throw (retry.error || created.error);
+      conversation = retry.data;
+    } else {
+      conversation = created.data;
+      const members = await supabase.from("chat_conversation_members").insert([
+        { conversation_id: conversation.id, user_id: state.user.id },
+        { conversation_id: conversation.id, user_id: profile.id }
+      ]);
+      if (members.error) throw members.error;
+    }
+  }
+  if (state.channel) { await supabase.removeChannel(state.channel); state.channel = null; }
+  if (state.typingChannel) { await supabase.removeChannel(state.typingChannel); state.typingChannel = null; }
+  state.activeRoom = null;
+  state.activeConversation = conversation;
+  state.activePeer = profile;
+  state.messages = [];
+  renderRooms();
+  renderDirectMessages();
+  $(".channel-kicker").textContent = "DIRECT MESSAGE";
+  $("#active-room-name").textContent = profile.display_name;
+  $("#room-description").textContent = "A private conversation between the two of you.";
+  messageInput.placeholder = `Message ${profile.display_name}`;
+  $("#messages").innerHTML = '<div class="loading-state">Loading conversation…</div>';
+
+  state.channel = supabase.channel(`chat-dm-db:${conversation.id}`);
+  state.channel.on("postgres_changes", {
+    event: "INSERT", schema: "public", table: "chat_direct_messages",
+    filter: `conversation_id=eq.${conversation.id}`
+  }, (payload) => {
+    if (!state.messages.some((message) => message.id === payload.new.id)) {
+      state.messages.push(payload.new);
+      renderMessages();
+      loadSenderForMessage(payload.new);
+    }
+  });
+  const dbReady = await waitForSubscription(state.channel);
+  if (!dbReady) toast("Live direct messages could not connect.");
+  await supabase.realtime.setAuth();
+  state.typingChannel = supabase.channel(`chat-dm:${conversation.id}`, { config: { private: true } });
+  state.typingChannel.on("broadcast", { event: "typing" }, ({ payload }) => showTyping(payload));
+  const typingReady = await waitForSubscription(state.typingChannel);
+  if (!typingReady) toast("Typing indicators are temporarily unavailable.");
+  await loadMessages();
+  $(".sidebar").classList.remove("open");
+}
 async function waitForSubscription(channel) {
   return new Promise((resolve) => {
     channel.subscribe((status) => {
@@ -127,7 +218,11 @@ async function selectRoom(roomId) {
   if (state.channel) { await supabase.removeChannel(state.channel); state.channel = null; }
   if (state.typingChannel) { await supabase.removeChannel(state.typingChannel); state.typingChannel = null; }
   state.activeRoom = room;
+  state.activeConversation = null;
+  state.activePeer = null;
   state.messages = [];
+  renderDirectMessages();
+  $(".channel-kicker").textContent = "PUBLIC CHANNEL";
   $("#active-room-name").textContent = room.name;
   $("#room-description").textContent = room.description || "A place to talk.";
   messageInput.placeholder = `Message #${room.name}`;
@@ -157,13 +252,27 @@ async function selectRoom(roomId) {
 }
 async function loadMessages() {
   $("#messages").innerHTML = '<div class="loading-state">Loading conversation…</div>';
-  const { data, error } = await supabase.from("chat_messages")
-    .select("id, room_id, sender_id, body, created_at, chat_profiles(display_name, avatar_url)")
-    .eq("room_id", state.activeRoom.id).order("created_at", { ascending: false }).limit(100);
+  const table = state.activeConversation ? "chat_direct_messages" : "chat_messages";
+  const foreign = "chat_profiles(display_name, avatar_url)";
+  let query = supabase.from(table).select(`id, sender_id, body, created_at, ${foreign}${state.activeConversation ? ", conversation_id, attachment_path" : ", room_id"}`);
+  query = state.activeConversation
+    ? query.eq("conversation_id", state.activeConversation.id)
+    : query.eq("room_id", state.activeRoom.id);
+  const { data, error } = await query.order("created_at", { ascending: false }).limit(100);
   if (error) { $("#messages").innerHTML = '<div class="empty-state"><h3>Could not load messages.</h3><p>Check your Supabase setup and refresh.</p></div>'; throw error; }
-  const fromDatabase = (data || []).reverse().map((message) => ({ ...message, profile: message.chat_profiles, sender_name: message.chat_profiles?.display_name || "Member" }));
+  const fromDatabase = (data || []).reverse().map((message) => ({
+    ...message, profile: message.chat_profiles,
+    sender_name: message.chat_profiles?.display_name || "Member"
+  }));
+  if (state.activeConversation) {
+    await Promise.all(fromDatabase.map(async (message) => {
+      if (message.attachment_path) {
+        const signed = await supabase.storage.from("chat-attachments").createSignedUrl(message.attachment_path, 3600);
+        if (!signed.error) message.attachment_url = signed.data.signedUrl;
+      }
+    }));
+  }
   const merged = new Map(fromDatabase.map((message) => [message.id, message]));
-  // Preserve inserts received while the initial history query was in flight.
   for (const message of state.messages) if (!merged.has(message.id)) merged.set(message.id, message);
   state.messages = [...merged.values()].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   renderMessages();
@@ -171,7 +280,12 @@ async function loadMessages() {
 async function loadSenderForMessage(message) {
   const { data } = await supabase.from("chat_profiles").select("display_name").eq("id", message.sender_id).maybeSingle();
   const found = state.messages.find((item) => item.id === message.id);
-  if (found && data) { found.sender_name = data.display_name; renderMessages(); }
+  if (found && data) found.sender_name = data.display_name;
+  if (found && found.attachment_path) {
+    const signed = await supabase.storage.from("chat-attachments").createSignedUrl(found.attachment_path, 3600);
+    if (!signed.error) found.attachment_url = signed.data.signedUrl;
+  }
+  if (found) renderMessages();
 }
 function renderMessages() {
   const container = $("#messages");
@@ -225,12 +339,36 @@ messageInput.addEventListener("input", () => {
 $("#message-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const body = messageInput.value.trim();
-  if (!body || !state.activeRoom) return;
+  const file = $("#attachment-input").files[0];
+  if (!body && !file) return;
+  if (file && !state.activeConversation) { toast("File sharing is currently available in direct messages."); return; }
+  if (file && file.size > 10 * 1024 * 1024) { toast("Files must be 10 MB or smaller."); return; }
+  const allowedTypes = ["image/jpeg", "image/png", "image/webp", "application/pdf", "text/plain"];
+  if (file && !allowedTypes.includes(file.type)) { toast("That file type is not supported."); return; }
   const button = $("#send-button"); button.disabled = true;
-  const { error } = await supabase.from("chat_messages").insert({ room_id: state.activeRoom.id, sender_id: state.user.id, body });
-  button.disabled = false;
-  if (error) { toast(error.message); return; }
-  messageInput.value = ""; messageInput.focus();
+  let attachmentPath = null;
+  try {
+    if (file) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(-100) || "attachment";
+      attachmentPath = `${state.activeConversation.id}/${state.user.id}/${crypto.randomUUID()}-${safeName}`;
+      const uploaded = await supabase.storage.from("chat-attachments").upload(attachmentPath, file, {
+        upsert: false, contentType: file.type
+      });
+      if (uploaded.error) throw uploaded.error;
+    }
+    const table = state.activeConversation ? "chat_direct_messages" : "chat_messages";
+    const payload = state.activeConversation
+      ? { conversation_id: state.activeConversation.id, sender_id: state.user.id, body: body || null, attachment_path: attachmentPath }
+      : { room_id: state.activeRoom.id, sender_id: state.user.id, body };
+    const { error } = await supabase.from(table).insert(payload);
+    if (error) throw error;
+    messageInput.value = "";
+    $("#attachment-input").value = "";
+    messageInput.focus();
+  } catch (error) {
+    if (attachmentPath) await supabase.storage.from("chat-attachments").remove([attachmentPath]);
+    toast(error.message || "Message could not be sent.");
+  } finally { button.disabled = false; }
 });
 $("#emoji-button").addEventListener("click", () => {
   messageInput.value += " 🙂"; messageInput.focus(); messageInput.dispatchEvent(new Event("input"));

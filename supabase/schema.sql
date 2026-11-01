@@ -274,12 +274,34 @@ create policy "Users delete their own chat attachments"
 drop policy if exists "Chat clients can receive chat broadcasts" on realtime.messages;
 create policy "Chat clients can receive chat broadcasts"
   on realtime.messages for select to authenticated
-  using (realtime.topic() like 'chat-room:%' or realtime.topic() like 'chat-dm:%' or realtime.topic() = 'chat-presence');
+  using (
+    realtime.topic() like 'chat-room:%'
+    or realtime.topic() = 'chat-presence'
+    or (
+      realtime.topic() like 'chat-dm:%'
+      and exists (
+        select 1 from public.chat_conversation_members m
+        where m.conversation_id::text = split_part(realtime.topic(), ':', 2)
+          and m.user_id = (select auth.uid())
+      )
+    )
+  );
 
 drop policy if exists "Chat clients can send chat broadcasts" on realtime.messages;
 create policy "Chat clients can send chat broadcasts"
   on realtime.messages for insert to authenticated
-  with check (realtime.topic() like 'chat-room:%' or realtime.topic() like 'chat-dm:%' or realtime.topic() = 'chat-presence');
+  with check (
+    realtime.topic() like 'chat-room:%'
+    or realtime.topic() = 'chat-presence'
+    or (
+      realtime.topic() like 'chat-dm:%'
+      and exists (
+        select 1 from public.chat_conversation_members m
+        where m.conversation_id::text = split_part(realtime.topic(), ':', 2)
+          and m.user_id = (select auth.uid())
+      )
+    )
+  );
 
 
 -- Cover the foreign keys used by participant and membership lookups.

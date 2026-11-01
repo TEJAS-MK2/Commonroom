@@ -3,7 +3,9 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#0a100e" />
+  <meta name="theme-color" content="#0c140f" />
+  <meta name="color-scheme" content="dark" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; object-src 'none'; script-src 'self' https://esm.sh; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; connect-src 'self' https://*.supabase.co wss://*.supabase.co; img-src 'self' data: https:; form-action 'self'; upgrade-insecure-requests" />
   <meta name="description" content="A welcoming public chat room. Drop in, meet people, and join the conversation — no account required." />
   <meta property="og:title" content="Commonroom — A little more human, a little less lonely." />
   <meta property="og:description" content="Drop into a public room and join the conversation. No account required." />
@@ -11,10 +13,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="./styles.css" />
   <script type="module" src="./app.js"></script>
 </head>
 <body>
+  <noscript><div class="noscript-notice">Commonroom needs JavaScript to connect to live rooms. Please enable JavaScript and reload this page.</div></noscript>
   <main class="app-shell">
     <aside class="sidebar" id="sidebar">
       <div class="brand-row">

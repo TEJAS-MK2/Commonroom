@@ -32,3 +32,5 @@ assert.match(schema, /grant execute on function public\.admin_overview\(text\) t
 assert.match(schema, /private\.chat_admin_audit/);
 assert.match(css, /\.admin-frame/);
 assert.match(css, /@media\(max-width:640px\)/);
+assert.match(schema, /v_client_ip/);
+assert.match(schema, /failed_attempts>=5 or global_attempts>=30/);

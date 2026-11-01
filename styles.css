@@ -250,3 +250,137 @@ body{background:radial-gradient(ellipse at 12% 0%,#25433355 0,transparent 38%),r
 @media(max-width:700px){
 }
 
+/* Accessibility and responsive polish */
+[hidden],
+.emoji-picker[hidden],
+.profile-popover[hidden],
+.reply-context[hidden],
+.sidebar-backdrop[hidden] {
+  display: none !important;
+}
+
+:root {
+  --text: #edf5ef;
+  --muted: #a0b1a5;
+  --accent: #b6e8c5;
+  --focus: #d0f2d9;
+}
+html { scroll-behavior: smooth; }
+body { font-size: 14px; }
+button, input { -webkit-tap-highlight-color: transparent; }
+button:focus-visible, input:focus-visible, a:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 3px;
+}
+.app-shell { min-height: 100dvh; }
+.sidebar {
+  min-height: 0;
+  border-color: #304238;
+  background: linear-gradient(155deg, #17251d 0%, #111b16 72%, #0e1712 100%);
+}
+.main-panel {
+  border-color: #304238;
+  background:
+    radial-gradient(ellipse at 82% 0%, #294b3524, transparent 42%),
+    linear-gradient(180deg, #111b16, #0d1511);
+}
+.room-item { min-height: 42px; font-size: 13px; }
+.section-heading { font-size: 10px; }
+.workspace-card strong { font-size: 12px; }
+.workspace-card div span, .sidebar-note p { font-size: 11px; }
+.profile-meta strong { font-size: 12px; }
+.profile-meta span { font-size: 10px; }
+.channel-heading h1 { font-size: 27px; }
+.channel-heading p { font-size: 12px; }
+.channel-kicker { font-size: 10px; }
+.online-copy strong { font-size: 11px; }
+.online-copy span { font-size: 10px; }
+.welcome-strip { padding: 15px 18px; }
+.welcome-strip strong { font-size: 13px; }
+.welcome-strip div span { font-size: 11px; }
+.messages { padding-top: 30px; }
+.message { gap: 14px; margin-bottom: 24px; }
+.message-avatar { width: 40px; height: 40px; border-radius: 13px; }
+.message-content { max-width: min(780px, calc(100% - 54px)); }
+.message-meta { gap: 10px; margin-bottom: 8px; }
+.message-author { font-size: 13px; }
+.message-meta time { font-size: 10px; }
+.message-content > p {
+  font-size: 14px;
+  line-height: 1.72;
+  padding: 11px 14px;
+  border-radius: 4px 14px 14px 14px;
+}
+.message-tools { gap: 8px; }
+.reaction-chip, .add-reaction { min-height: 29px; font-size: 11px; }
+.message-actions { gap: 6px; margin-top: 8px; }
+.message-actions button { min-height: 29px; padding: 5px 10px; font-size: 10px; }
+.composer { min-height: 66px; }
+.composer input { font-size: 14px; }
+.composer-tool { width: 38px; height: 38px; }
+.send-button { width: 42px; height: 42px; }
+.composer-hint { font-size: 9px; }
+.composer-footer { font-size: 10px; }
+.reply-context { min-height: 48px; }
+.reply-context > span { font-size: 11px; }
+.reply-context small { font-size: 10px; }
+.empty-state h2 { font-size: 21px; }
+.empty-state p { font-size: 13px; }
+.loading-state { font-size: 13px; }
+.toast { max-width: min(520px, calc(100vw - 32px)); font-size: 12px; }
+
+.sidebar-backdrop {
+  position: fixed;
+  z-index: 25;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: #020805a8;
+  backdrop-filter: blur(3px);
+}
+.sidebar { z-index: 30; }
+
+@media (hover: none) {
+  .message-actions { opacity: 1; }
+  .add-reaction { opacity: 1; }
+}
+@media (max-width: 900px) {
+  .channel-heading h1 { font-size: 24px; }
+  .message-content > p { font-size: 13px; }
+}
+@media (max-width: 700px) {
+  .sidebar { z-index: 30; min-height: 0; }
+  .sidebar-backdrop { z-index: 25; }
+  .topbar { min-height: 94px; }
+  .channel-heading h1 { font-size: 21px; }
+  .channel-heading p { font-size: 10px; }
+  .welcome-strip { padding: 12px 13px; }
+  .welcome-strip strong { font-size: 11px; }
+  .welcome-strip div span { font-size: 9px; }
+  .messages { padding: 20px 14px 14px; }
+  .message { gap: 10px; margin-bottom: 20px; }
+  .message-avatar { width: 34px; height: 34px; border-radius: 11px; }
+  .message-content { max-width: calc(100% - 44px); }
+  .message-content > p { font-size: 13px; padding: 10px 12px; }
+  .message-actions { opacity: 1; }
+  .message-actions button { min-height: 32px; padding: 6px 9px; }
+  .composer { min-height: 58px; }
+  .composer input { font-size: 13px; }
+  .composer-footer { font-size: 8px; }
+  .sidebar-backdrop { display: block; }
+  .sidebar-backdrop[hidden] { display: none !important; }
+}
+@media (max-width: 380px) {
+  .topbar-right { gap: 5px; }
+  .online-copy strong { font-size: 9px; }
+  .connection-pill { padding: 6px 7px; }
+  .welcome-strip { margin-left: 9px; margin-right: 9px; }
+  .composer-footer { letter-spacing: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  .message, .room-item, .icon-button, .send-button { animation: none; transition: none; }
+}

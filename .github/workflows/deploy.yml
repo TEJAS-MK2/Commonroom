@@ -50,7 +50,7 @@ jobs:
           parser.feed(Path("index.html").read_text(encoding="utf-8"))
           required = {
               "auth-screen", "chat-screen", "auth-form", "email", "password",
-              "display-name", "room-list", "messages", "message-form",
+              "display-name", "room-list", "direct-list", "new-dm", "attachment-input", "messages", "message-form",
               "message-input", "send-button", "sign-out", "toast"
           }
           missing = required - parser.ids

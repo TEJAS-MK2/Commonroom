@@ -34,3 +34,5 @@ assert.match(css, /\.admin-frame/);
 assert.match(css, /@media\(max-width:640px\)/);
 assert.match(schema, /v_client_ip/);
 assert.match(schema, /failed_attempts>=5 or global_attempts>=30/);
+assert.match(schema, /alter table private\.chat_admin_config enable row level security/);
+assert.match(schema, /commonroom-admin-global/);

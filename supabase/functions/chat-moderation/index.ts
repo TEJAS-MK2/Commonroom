@@ -24,9 +24,11 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Method not allowed." }, 405);
   const origin = req.headers.get("origin");
-  if (origin && origin !== "https://tejas-mk2.github.io" && !origin.startsWith("http://localhost:")) {
+  if (origin && origin !== "https://tejas-mk2.github.io") {
     return json({ error: "Origin not allowed." }, 403);
   }
+  const contentLength = Number(req.headers.get("content-length") || 0);
+  if (contentLength > 16000) return json({ error: "Request is too large." }, 413);
   let payload: Record<string, unknown>;
   try { payload = await req.json(); } catch { return json({ error: "Invalid JSON." }, 400); }
   const keys = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") ?? "{}");

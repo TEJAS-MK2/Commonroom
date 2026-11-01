@@ -13,7 +13,7 @@ const state = {
   name: storage.get("commonroom-name", ""),
   senderKey: storage.get("commonroom-guest-id", ""),
   rooms: [], activeRoom: null, messages: [], messageChannel: null,
-  typingChannel: null, presence: null, typingTimer: null, online: new Map(), reactions: [], pinned: null, replyTarget: null, editTokens: JSON.parse(storage.get("commonroom-edit-tokens", "{}"))
+  typingChannel: null, presence: null, typingTimer: null, online: new Map(), reactions: [], editTokens: {}, pinned: null, replyTarget: null, reactions: [], pinned: null, replyTarget: null, editTokens: JSON.parse(storage.get("commonroom-edit-tokens", "{}"))
 };
 if (!state.senderKey) {
   state.senderKey = crypto.randomUUID();

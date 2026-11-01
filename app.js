@@ -465,6 +465,8 @@ function renderMessages() {
 }
 const selectRoomWithThreads = selectRoom;
 selectRoom = async function(roomId) {
+  if (state.controlChannel) await supabase.removeChannel(state.controlChannel);
+  state.controlChannel = null;
   await selectRoomWithThreads(roomId);
   clearReplyTarget();
   if (!state.activeRoom) return;

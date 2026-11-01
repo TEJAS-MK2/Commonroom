@@ -52,7 +52,7 @@ jobs:
                       self.ids.add(attrs["id"])
           parser = PageParser()
           parser.feed(Path("index.html").read_text(encoding="utf-8"))
-          required = {"chat-screen", "room-list", "room-count", "new-room", "messages", "message-form", "message-input", "send-button", "change-name", "my-name", "my-avatar", "online-count", "toast", "reply-context", "emoji-picker", "profile-popover"}
+          required = {"chat-screen", "room-list", "room-count", "new-room", "messages", "message-form", "message-input", "send-button", "change-name", "my-name", "my-avatar", "online-count", "toast", "reply-context", "emoji-picker", "profile-popover", "admin-open", "admin-overlay", "admin-login-form", "admin-pin", "admin-dashboard", "admin-content"}
           missing = required - parser.ids
           if parser.errors or missing:
               raise SystemExit("; ".join(parser.errors + ([f"missing ids: {sorted(missing)}"] if missing else [])))

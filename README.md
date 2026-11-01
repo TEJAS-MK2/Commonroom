@@ -142,7 +142,7 @@ Built with care for simple, open, real-time conversations. Contributions, bug re
 
 ## Admin Control Room
 
-The admin console is opened from the shield/control-room button in the sidebar. Admin authentication is verified by private database functions; the PIN verifier, login attempts, sessions, and audit log are stored in the non-exposed `private` schema. The PIN is never embedded in the browser bundle. Failed PIN attempts are limited to five per IP per 15 minutes (with a global attempt ceiling), and successful sessions expire after 30 minutes.
+The admin console is opened from the shield/control-room button in the sidebar. Admin authentication is verified by private database functions; the PIN verifier, login attempts, sessions, and audit log are stored in the non-exposed `private` schema. The four-digit PIN is a convenience credential, not a substitute for strong multi-factor authentication; keep the database owner account protected and consider moving to an identity-backed admin account before inviting additional operators. The PIN is never embedded in the browser bundle. Failed PIN attempts are limited to five per IP per 15 minutes (with a global attempt ceiling), and successful sessions expire after 30 minutes.
 
 The control room provides community metrics, recent-message moderation, report review, room editing/deletion (the `general` room is protected), and an admin activity log. Admin sessions are held in memory for the current page only.
 

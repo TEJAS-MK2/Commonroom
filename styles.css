@@ -291,3 +291,14 @@ body{background:radial-gradient(ellipse at 12% 0%,#25433355 0,transparent 38%),r
  .moderator-head{padding:19px 17px 15px}.moderator-toolbar{padding:10px 13px}.moderator-reports{padding:10px}
  .report-actions button{font-size:9px;padding:7px 8px}
 }
+
+.moderator-blocks{flex:none;max-height:190px;overflow:auto;padding:13px 15px 14px;border-top:1px solid #2b3d32;background:#111a15}
+.moderator-blocks-title{margin:0 0 9px;color:#d0b58a;font-size:8px;font-weight:800;letter-spacing:1.2px}
+.moderator-block-list{display:grid;gap:6px}
+.moderator-block-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid #3b4437;border-radius:9px;background:#ffffff04}
+.moderator-block-row>span{display:flex;min-width:0;flex-direction:column;gap:3px}
+.moderator-block-row strong{color:#c4d4c7;font-size:9px;font-family:monospace}
+.moderator-block-row small{color:#8d9c90;font-size:8px}
+.moderator-block-row button{padding:6px 8px;border:1px solid #45624a;border-radius:7px;background:#a9e7bf0d;color:#b9dfc3;font-size:8px;white-space:nowrap}
+.moderator-empty.compact{min-height:42px;padding:8px;font-size:9px}
+@media(max-width:700px){.moderator-blocks{max-height:165px;padding:10px 11px}.moderator-block-row{padding:7px}}

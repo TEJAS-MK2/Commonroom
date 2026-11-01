@@ -13,7 +13,11 @@ const state = {
   name: storage.get("commonroom-name", ""),
   senderKey: storage.get("commonroom-guest-id", ""),
   rooms: [], activeRoom: null, messages: [], messageChannel: null,
-  typingChannel: null, presence: null, typingTimer: null, online: new Map(), reactions: [], editTokens: {}, pinned: null, replyTarget: null, editTokens: JSON.parse(storage.get("commonroom-edit-tokens", "{}")), moderatorKey: (() => { try { return sessionStorage.getItem("commonroom-moderator-key") || ""; } catch { return ""; } })(), moderatorActive: false
+  typingChannel: null, presence: null, typingTimer: null, online: new Map(),
+  reactions: [], pinned: null, replyTarget: null,
+  editTokens: (() => { try { return JSON.parse(storage.get("commonroom-edit-tokens", "{}")) || {}; } catch { return {}; } })(),
+  moderatorKey: (() => { try { return sessionStorage.getItem("commonroom-moderator-key") || ""; } catch { return ""; } })(),
+  moderatorActive: false
 };
 if (!state.senderKey) {
   state.senderKey = crypto.randomUUID();

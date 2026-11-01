@@ -1,6 +1,6 @@
 # Chat
 
-A clean, responsive real-time messaging app built with HTML, CSS, JavaScript, and Supabase.
+A clean, responsive real-time messaging app built with HTML, CSS, JavaScript, and Supabase.\n\n**Live app:** https://tejas-mk2.github.io/Chat/
 
 ## Features
 
@@ -34,7 +34,7 @@ The connected Supabase project is already configured in `supabase/config.js`.
    ```
 
 4. Open http://localhost:8000 and create an account.
-5. If email confirmation is enabled, confirm your email before signing in. Add local and deployed URLs to the Supabase Auth URL configuration.
+5. In Supabase Dashboard → Authentication → URL Configuration, set the Site URL to `https://tejas-mk2.github.io/Chat/` and add that URL plus your local development URL to the Redirect URLs allowlist.\n6. If email confirmation is enabled, confirm your email before signing in.\n7. Recommended: enable leaked-password protection under Authentication → Password Security.
 
 ## Security
 

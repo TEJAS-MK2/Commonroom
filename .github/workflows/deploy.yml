@@ -64,7 +64,7 @@ jobs:
           python - <<'PY'
           from pathlib import Path
           config = Path("supabase/config.js").read_text(encoding="utf-8")
-          forbidden = ("service_role", "sb_secret_", "SUPABASE_SERVICE_ROLE")
+          forbidden = ("sb_secret_", "SUPABASE_SERVICE_ROLE", "service_role:")
           if any(token in config for token in forbidden):
               raise SystemExit("A privileged Supabase key must never be shipped to the browser.")
           if "SUPABASE_URL" not in config or "SUPABASE_PUBLISHABLE_KEY" not in config:

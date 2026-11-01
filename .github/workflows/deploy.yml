@@ -56,6 +56,11 @@ jobs:
           missing = required - parser.ids
           if parser.errors or missing:
               raise SystemExit("; ".join(parser.errors + ([f"missing ids: {sorted(missing)}"] if missing else [])))
+          html = Path("index.html").read_text(encoding="utf-8")
+          if "Content-Security-Policy" not in html or "<noscript>" not in html or "favicon.svg" not in html:
+              raise SystemExit("CSP, noscript fallback, and favicon reference are required.")
+          if not Path("favicon.svg").is_file():
+              raise SystemExit("favicon.svg is referenced but missing.")
           print(f"HTML smoke check passed: {len(parser.ids)} unique IDs.")
           PY
       - name: Validate policies and interface safeguards
@@ -99,7 +104,7 @@ jobs:
       - name: Assemble static site
         run: |
           mkdir -p _site/supabase
-          cp index.html styles.css app.js _site/
+          cp index.html styles.css app.js favicon.svg _site/
           cp supabase/config.js _site/supabase/
           touch _site/.nojekyll
       - name: Upload Pages artifact

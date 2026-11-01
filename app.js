@@ -354,13 +354,18 @@ selectRoom = async function(roomId) {
   await originalSelectRoom(roomId);
   const room = state.activeRoom;
   if (!room) return;
-  const result = await supabase.from("chat_guest_reactions").select("id,message_id,sender_key,emoji").limit(1000);
+  const messageIds = state.messages.map((message) => message.id);
+  const result = messageIds.length
+    ? await supabase.from("chat_guest_reactions").select("id,message_id,sender_key,emoji").in("message_id", messageIds)
+    : { data: [], error: null };
+  if (state.activeRoom?.id !== room.id) return;
   if (result.error) console.warn("Reactions unavailable:", result.error);
   else state.reactions = result.data || [];
   renderMessages();
   state.reactionChannel = supabase.channel("commonroom-reactions:" + room.id)
     .on("postgres_changes", { event: "*", schema: "public", table: "chat_guest_reactions" }, (payload) => {
-      if (payload.eventType === "INSERT") {
+      const visibleMessageIds = new Set(state.messages.map((message) => message.id));
+      if (payload.eventType === "INSERT" && visibleMessageIds.has(payload.new.message_id)) {
         if (!state.reactions.some((item) => item.id === payload.new.id)) state.reactions.push(payload.new);
       } else if (payload.eventType === "DELETE") {
         state.reactions = state.reactions.filter((item) => item.id !== payload.old.id);

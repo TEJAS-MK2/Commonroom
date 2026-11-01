@@ -40,7 +40,7 @@ The browser uses only a Supabase publishable key, which is intended for client-s
 
 ## Deployment
 
-This is a static app and can be deployed to GitHub Pages, Netlify, or Vercel. For GitHub Pages, enable Pages from the `main` branch and root folder.
+A GitHub Actions workflow validates the JavaScript module syntax, checks required HTML elements and verifies that no privileged Supabase key is included in the browser bundle. On pushes to `main`, it assembles and deploys the static site to GitHub Pages. The workflow uses the GitHub Pages Actions deployment flow; ensure Pages is enabled for the repository and configured to use GitHub Actions.
 
 ## Current scope
 

@@ -407,26 +407,11 @@ begin
   end if;
 end $$;
 
--- Message replies, client-held owner tokens, and one pinned message per room.
+-- Message replies and client-held owner tokens.
 alter table public.chat_guest_messages
   add column if not exists reply_to uuid references public.chat_guest_messages(id) on delete set null,
   add column if not exists edited_at timestamptz,
   add column if not exists edit_token_hash text;
-
-create table if not exists public.chat_guest_pins (
-  room_id uuid primary key references public.chat_rooms(id) on delete cascade,
-  message_id uuid not null unique references public.chat_guest_messages(id) on delete cascade,
-  pinned_by uuid not null,
-  created_at timestamptz not null default now()
-);
-alter table public.chat_guest_pins enable row level security;
-drop policy if exists "Anyone can view public room pins" on public.chat_guest_pins;
-create policy "Anyone can view public room pins" on public.chat_guest_pins for select to anon, authenticated using (true);
-drop policy if exists "Guests can pin public room messages" on public.chat_guest_pins;
-create policy "Guests can pin public room messages" on public.chat_guest_pins for insert to anon, authenticated with check (true);
-drop policy if exists "Guests can unpin public room messages" on public.chat_guest_pins;
-create policy "Guests can unpin public room messages" on public.chat_guest_pins for delete to anon, authenticated using (true);
-grant select, insert, delete on public.chat_guest_pins to anon, authenticated;
 
 create or replace function public.edit_guest_message(p_message_id uuid, p_token text, p_body text)
 returns boolean language plpgsql security definer set search_path = pg_catalog, public as $$
@@ -455,45 +440,12 @@ revoke all on function public.delete_guest_message(uuid,text) from public;
 grant execute on function public.edit_guest_message(uuid,text,text) to anon, authenticated;
 grant execute on function public.delete_guest_message(uuid,text) to anon, authenticated;
 
--- Reports and moderation restrictions are server-managed; clients cannot read or mutate these tables.
-create table if not exists public.chat_guest_reports (
-  id uuid primary key default gen_random_uuid(),
-  message_id uuid not null references public.chat_guest_messages(id) on delete cascade,
-  reporter_key uuid not null,
-  reason text not null check (reason in ('spam','harassment','hate','personal-info','other')),
-  details text not null default '',
-  status text not null default 'open' check (status in ('open','reviewed','dismissed')),
-  created_at timestamptz not null default now(),
-  unique(message_id, reporter_key)
-);
-create index if not exists chat_guest_reports_status_created_idx on public.chat_guest_reports(status, created_at desc);
-alter table public.chat_guest_reports enable row level security;
-revoke all on public.chat_guest_reports from anon, authenticated;
-
-create table if not exists public.chat_guest_moderation_blocks (
-  sender_key uuid primary key,
-  reason text not null default 'Community guidelines',
-  created_at timestamptz not null default now(),
-  expires_at timestamptz
-);
-alter table public.chat_guest_moderation_blocks enable row level security;
-revoke all on public.chat_guest_moderation_blocks from anon, authenticated;
-
-drop policy if exists "Guests can pin public room messages" on public.chat_guest_pins;
-drop policy if exists "Guests can unpin public room messages" on public.chat_guest_pins;
-revoke insert, delete on public.chat_guest_pins from anon, authenticated;
-grant select on public.chat_guest_pins to anon, authenticated;
-
 create or replace function public.enforce_guest_chat_limits()
 returns trigger language plpgsql set search_path = pg_catalog, public as $$
 declare recent_count integer;
 begin
   new.created_at := now();
   perform pg_advisory_xact_lock(hashtext(new.sender_key::text));
-  if exists (select 1 from public.chat_guest_moderation_blocks
-    where sender_key = new.sender_key and (expires_at is null or expires_at > now())) then
-    raise exception 'This guest is restricted from posting in this community.' using errcode = '42501';
-  end if;
   select count(*) into recent_count from public.chat_guest_messages
     where sender_key = new.sender_key and created_at > now() - interval '15 seconds';
   if recent_count >= 5 then
@@ -533,29 +485,3 @@ for each row execute function public.enforce_guest_reaction_limits();
 
 -- Current deployed anti-abuse hardening.
 create index if not exists chat_guest_messages_reply_to_idx on public.chat_guest_messages(reply_to);
-revoke execute on function public.edit_guest_message(uuid,text,text) from anon, authenticated;
-revoke execute on function public.delete_guest_message(uuid,text) from anon, authenticated;
-create or replace function public.enforce_guest_report_limits()
-returns trigger language plpgsql set search_path = pg_catalog, public as $$
-declare recent_count integer;
-begin
-  new.created_at := now();
-  perform pg_advisory_xact_lock(hashtext(new.reporter_key::text));
-  select count(*) into recent_count from public.chat_guest_reports
-    where reporter_key = new.reporter_key and created_at > now() - interval '1 hour';
-  if recent_count >= 10 then raise exception 'You have submitted too many reports. Please try again later.' using errcode = 'P0001'; end if;
-  return new;
-end;
-$$;
-revoke all on function public.enforce_guest_report_limits() from public;
-drop trigger if exists chat_guest_report_rate_limit on public.chat_guest_reports;
-create trigger chat_guest_report_rate_limit before insert on public.chat_guest_reports
-for each row execute function public.enforce_guest_report_limits();
-
--- Keep room pin updates synchronized to all connected guests.
-do $$
-begin
-  if not exists (select 1 from pg_publication_tables where pubname='supabase_realtime' and schemaname='public' and tablename='chat_guest_pins') then
-    alter publication supabase_realtime add table public.chat_guest_pins;
-  end if;
-end $$;

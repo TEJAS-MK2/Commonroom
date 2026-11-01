@@ -384,3 +384,8 @@ button:focus-visible, input:focus-visible, a:focus-visible {
   html { scroll-behavior: auto; }
   .message, .room-item, .icon-button, .send-button { animation: none; transition: none; }
 }
+
+.connection-pill[data-state="pending"] { border-color: #665a35; color: #e6d6a2; background: #9b7a2014; }
+.connection-pill[data-state="pending"] .live-dot { background: #e1bd62; box-shadow: 0 0 0 3px #e1bd6218; }
+.connection-pill[data-state="warning"] { border-color: #704c3e; color: #f0b79d; background: #a54f2814; }
+.connection-pill[data-state="warning"] .live-dot { background: #e69a72; box-shadow: 0 0 0 3px #e69a7218; }

@@ -405,8 +405,7 @@ $("#emoji-button").addEventListener("click", (event) => {
 });
 window.addEventListener("resize", closePopovers);
 
-/* Threads, owner-token message editing/deletion, and room pins. */
-state.pinned = null;
+/* Threads and owner-token message editing/deletion. */
 state.replyTarget = null;
 try { state.editTokens = JSON.parse(storage.get("commonroom-edit-tokens", "{}")) || {}; } catch { state.editTokens = {}; }
 function createEditToken() {

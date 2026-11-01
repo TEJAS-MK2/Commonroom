@@ -27,8 +27,8 @@ Commonroom keeps the experience intentionally simple: choose a room, meet the pe
 - Message replies with jump-to-original context
 - Edit and delete controls for messages from the original browser
 - Responsive desktop, tablet, and mobile layouts with touch-aware controls
-- Room creation guardrails (100-room cap and five new rooms per minute globally)
-- Token-protected reaction removal; reactions cannot be deleted by arbitrary public requests
+- Room creation guardrails (100-room cap, five per minute globally, and five per network per hour)
+- Message and reaction ownership hashes stored in non-exposed private tables; public chat rows contain no edit/reaction token hashes
 - Keyboard focus states and reduced-motion support
 - Recent message history, with the latest 100 messages loaded per room
 
@@ -66,7 +66,7 @@ Use only the project's browser-safe publishable key (or legacy `anon` key). **Ne
 
 Open the Supabase SQL Editor and run `supabase/schema.sql`. Review the SQL and confirm it targets the intended project before applying it.
 
-Enable Realtime for the message and reaction tables used by the client. The `public` schema must be exposed through the Supabase Data API, with the grants and row-level security policies required by the schema.
+The schema adds the message, reaction, and room-directory tables to Supabase Realtime as needed. The `public` schema must be exposed through the Supabase Data API, with the grants and row-level security policies required by the schema. The `public` schema must be exposed through the Supabase Data API, with the grants and row-level security policies required by the schema.
 
 ### 3. Start a local server
 
@@ -88,11 +88,13 @@ The project uses ES modules, so opening `index.html` directly as a `file://` URL
 │   └── workflows/
 │       └── deploy.yml
 ├── index.html
+├── favicon.svg
 ├── styles.css
 ├── app.js
 ├── supabase/
 │   ├── config.js
-│   └── schema.sql
+│   ├── schema.sql
+│   └── migrations/
 ├── CODE_OF_CONDUCT.md
 ├── CONTRIBUTING.md
 ├── README.md
@@ -105,10 +107,11 @@ Commonroom is a **public anonymous chat**, not a private messaging service.
 
 - Messages, display names, room names, reactions, and room presence are visible to people using the public application.
 - Display names are not verified identities and can be impersonated.
-- A random browser-local sender key distinguishes a visitor's messages. It is not authentication and can be reset or spoofed.
-- Message edit/delete ownership uses a random token kept in that browser's local storage; only its SHA-256 hash is stored with the message. Clearing site data or changing browsers can remove the ability to manage an earlier message.
-- Database triggers apply per-browser duplicate and burst checks. A PostgREST pre-request hook also enforces a 100-write / five-minute per-IP ceiling on Commonroom message, reaction, room, and message-management endpoints. Network-level controls can still be bypassed with distributed IPs or VPNs; they are abuse friction, not identity verification.
-- Public room creation is globally capped at 100 rooms and five creations per minute. This is a shared safety ceiling, not per-visitor identity-based quota.
+- A random browser-local sender key distinguishes a visitor's messages. It is visible in public message data, is not authentication, and can be reset or spoofed. Per-device limits are therefore not identity controls; the network limiter is the primary abuse friction.
+- Because the sender key is public and user-controlled, an attacker can still race to reserve the same sender-key/reaction tuple. The client now reports the duplicate-key conflict rather than swallowing it, but only authenticated identities can fully prevent this ownership impersonation.
+- Message edit/delete ownership uses a random token kept in that browser's local storage. Only its SHA-256 hash is stored in `private.chat_guest_message_tokens`; reaction hashes are stored in `private.chat_guest_reaction_tokens`. Public rows and their Realtime payloads do not expose those hashes. Clearing site data or changing browsers can remove the ability to manage an earlier message.
+- Database triggers apply per-device duplicate and burst checks. A PostgREST pre-request hook uses the gateway's `cf-connecting-ip` header (not caller-controlled left-most `X-Forwarded-For`) for a 100-write / five-minute network ceiling on Commonroom message, reaction, room, and message-management endpoints. Missing or malformed proxy IP values share a fallback bucket. The counter is in the same database transaction as the request, so failed writes can roll back their own counter entry; this is abuse friction, not a standalone DDoS shield. Network-level controls can still be bypassed with distributed IPs or VPNs.
+- Public room creation is globally capped at 100 rooms and five creations per minute, with an additional five-per-network-per-hour limit. Admins can delete rooms to free capacity. Anonymous networks are not verified identities.
 - Reaction removal uses a random browser-held token and a server-side hash check. Older reactions created before this protection may not be removable from the original device.
 - Do not use Commonroom to share passwords, financial information, personal records, or other sensitive content.
 - There are no private direct messages or private file uploads.

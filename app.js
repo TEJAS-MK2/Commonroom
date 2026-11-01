@@ -323,8 +323,7 @@ $("#message-form").addEventListener("submit", async (event) => {
     if (error) throw error;
     const messageId = typeof data === "string" ? data : data?.id;
     if (messageId) {
-      state.editTokens[messageId] = token;
-      storage.set("commonroom-edit-tokens", JSON.stringify(state.editTokens));
+      storeLimitedToken(state.editTokens, messageId, token, "commonroom-edit-tokens");
     }
     input.value = ""; clearReplyTarget(); input.focus();
   } catch (error) {
@@ -434,8 +433,7 @@ async function toggleReaction(messageId, emoji) {
     }
     if (result.error) throw result.error;
     if (created) {
-      state.reactionTokens[tokenKey] = token;
-      storage.set("commonroom-reaction-tokens", JSON.stringify(state.reactionTokens));
+      storeLimitedToken(state.reactionTokens, tokenKey, token, "commonroom-reaction-tokens");
       if (!state.reactions.some((item) => item.id === created.id)) state.reactions.push(created);
     }
   }
@@ -537,6 +535,12 @@ function createEditToken() {
 async function hashEditToken(token) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+function storeLimitedToken(map, key, token, storageKey, limit = 1000) {
+  map[key] = token;
+  const keys = Object.keys(map);
+  while (keys.length > limit) delete map[keys.shift()];
+  storage.set(storageKey, JSON.stringify(map));
 }
 function pruneMessageTokens(messageId) {
   if (Object.prototype.hasOwnProperty.call(state.editTokens, messageId)) {

@@ -15,5 +15,7 @@ assert.match(css, /@media \(min-width: 701px\) and \(max-width: 1100px\)/);
 assert.match(schema, /create policy "Guests can add token-owned chat reactions"/);
 assert.match(schema, /create or replace function public\.delete_guest_reaction/);
 assert.match(schema, /enforce_guest_room_creation_limits/);
+assert.match(schema, /enforce_chat_api_rate_limit/);
+assert.match(schema, /pgrst\\.db_pre_request/);
 assert.match(workflow, /node tests\/smoke\.mjs/);
 console.log("Commonroom security and responsive smoke checks passed.");

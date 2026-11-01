@@ -60,4 +60,4 @@ The moderation center and public report submission use the deployed `chat-modera
 2. Add `CHAT_MODERATOR_SECRET` with a randomly generated value of at least 32 characters (use a password manager; do not commit it or send it in chat).
 3. Open Commonroom, select **Moderation**, and enter the same secret. It is kept in the current browser tab session and can be locked at any time.
 
-Without this secret, public reporting and database anti-spam protections still work, but privileged moderation actions remain locked. The Edge Function uses the project's server-side Supabase secret key; no privileged key is shipped to the browser.
+Without this secret, public reporting and database anti-spam protections still work, but privileged moderation actions remain locked. The Edge Function connects through Supabase's server-side `SUPABASE_DB_URL` secret; no database password, service-role key, or secret API key is shipped to the browser.

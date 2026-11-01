@@ -56,6 +56,32 @@ jobs:
               raise SystemExit("; ".join(parser.errors + ([f"missing ids: {sorted(missing)}"] if missing else [])))
           print(f"HTML smoke check passed: {len(parser.ids)} unique IDs.")
           PY
+      - name: Validate policies and interface safeguards
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          html = Path("index.html").read_text(encoding="utf-8")
+          css = Path("styles.css").read_text(encoding="utf-8")
+          app = Path("app.js").read_text(encoding="utf-8")
+          readme = Path("README.md").read_text(encoding="utf-8")
+          required_files = ("SECURITY.md", "CONTRIBUTING.md", "CODE_OF_CONDUCT.md")
+          missing = [name for name in required_files if not Path(name).is_file()]
+          if missing:
+              raise SystemExit(f"Missing project policies: {missing}")
+          for name in required_files:
+              if f"]({name})" not in readme:
+                  raise SystemExit(f"README does not link to {name}")
+          if 'id="sidebar-backdrop"' not in html or 'aria-expanded="false"' not in html:
+              raise SystemExit("Mobile navigation must expose an accessible backdrop and expanded state.")
+          if "[hidden]" not in css or "display: none !important" not in css:
+              raise SystemExit("Hidden interface elements must remain hidden when component styles are applied.")
+          if "connection-status" not in html or "setConnectionStatus" not in app:
+              raise SystemExit("Realtime connection state must be visible to users.")
+          for token in ("chat-moderation", "moderator-open", "pinned-banner"):
+              if token in app or token in html or token in css:
+                  raise SystemExit(f"Retired moderation UI reference found: {token}")
+          print("Policy, mobile navigation, hidden-state, and connection-status checks passed.")
+          PY
       - name: Check client configuration for secret keys
         run: |
           python - <<'PY'

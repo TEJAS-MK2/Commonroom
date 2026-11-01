@@ -530,3 +530,24 @@ revoke all on function public.enforce_guest_reaction_limits() from public;
 drop trigger if exists chat_guest_reaction_rate_limit on public.chat_guest_reactions;
 create trigger chat_guest_reaction_rate_limit before insert on public.chat_guest_reactions
 for each row execute function public.enforce_guest_reaction_limits();
+
+-- Current deployed anti-abuse hardening.
+create index if not exists chat_guest_messages_reply_to_idx on public.chat_guest_messages(reply_to);
+revoke execute on function public.edit_guest_message(uuid,text,text) from anon, authenticated;
+revoke execute on function public.delete_guest_message(uuid,text) from anon, authenticated;
+create or replace function public.enforce_guest_report_limits()
+returns trigger language plpgsql set search_path = pg_catalog, public as $$
+declare recent_count integer;
+begin
+  new.created_at := now();
+  perform pg_advisory_xact_lock(hashtext(new.reporter_key::text));
+  select count(*) into recent_count from public.chat_guest_reports
+    where reporter_key = new.reporter_key and created_at > now() - interval '1 hour';
+  if recent_count >= 10 then raise exception 'You have submitted too many reports. Please try again later.' using errcode = 'P0001'; end if;
+  return new;
+end;
+$$;
+revoke all on function public.enforce_guest_report_limits() from public;
+drop trigger if exists chat_guest_report_rate_limit on public.chat_guest_reports;
+create trigger chat_guest_report_rate_limit before insert on public.chat_guest_reports
+for each row execute function public.enforce_guest_report_limits();

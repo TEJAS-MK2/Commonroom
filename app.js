@@ -128,7 +128,7 @@ async function loadMessages(roomId) {
   state.messages = [...existing.values()].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   renderMessages();
 }
-function renderMessages() {
+function renderMessagesLegacy() {
   const container = $("#messages");
   if (!state.messages.length) {
     container.innerHTML = '<div class="empty-state"><div class="empty-illustration">✳</div><span class="empty-kicker">A FRESH START</span><h2>It’s quiet in here.</h2><p>Be the first to say hello and set the tone.</p></div>';

@@ -3,8 +3,10 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="theme-color" content="#101b19" />
-  <meta name="description" content="A real-time community chat. Join the conversation instantly." />
+  <meta name="theme-color" content="#0a100e" />
+  <meta name="description" content="A welcoming public chat room. Drop in, meet people, and join the conversation — no account required." />
+  <meta property="og:title" content="Commonroom — A little more human, a little less lonely." />
+  <meta property="og:description" content="Drop into a public room and join the conversation. No account required." />
   <title>Commonroom — Live community chat</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -19,7 +21,7 @@
         <a class="brand" href="#" aria-label="Commonroom home"><span class="brand-mark">c</span><span>commonroom<span class="brand-period">.</span></span></a>
         <button id="new-room" class="icon-button" type="button" aria-label="Create a room" title="Create a room">＋</button>
       </div>
-      <div class="workspace-card"><span class="workspace-icon">✳</span><div><strong>Open community</strong><span>Everyone is welcome</span></div><i class="live-dot"></i></div>
+      <div class="workspace-card"><span class="workspace-icon">✳</span><div><strong>Public lounge</strong><span>No account. Just conversation.</span></div><i class="live-dot"></i></div>
       <div class="section-heading"><span>CHANNELS</span><span class="section-count" id="room-count">03</span></div>
       <nav class="room-list" id="room-list" aria-label="Chat channels"></nav>
       <div class="sidebar-note"><span class="note-icon">↗</span><p>Good conversations happen when everyone feels welcome.</p></div>
@@ -34,11 +36,11 @@
     <section id="chat-screen" class="main-panel">
       <header class="topbar">
         <div class="mobile-brand"><button id="mobile-menu" class="icon-button mobile-only" type="button" aria-label="Open channels" aria-controls="sidebar" aria-expanded="false">☰</button><span class="brand-mark small">c</span></div>
-        <div class="channel-heading"><div class="channel-kicker"><span class="live-dot"></span> COMMUNITY CHANNEL</div><h1><span class="hash">#</span><span id="active-room-name">general</span></h1><p id="room-description">A place for everyday conversations.</p></div>
+        <div class="channel-heading"><div class="channel-kicker"><span class="live-dot"></span> THE COMMUNITY LOUNGE</div><h1><span class="hash">#</span><span id="active-room-name">general</span></h1><p id="room-description">A place for everyday conversations.</p></div>
         <div class="topbar-right"><div class="online-avatars" id="online-stack"></div><div class="online-copy"><strong id="online-count">1 online</strong><span>in this room</span></div><span class="connection-pill" id="connection-status" data-state="pending" aria-live="polite" aria-label="Realtime connection"><i class="live-dot"></i> Connecting</span></div>
       </header>
 
-      <div class="welcome-strip"><div class="welcome-symbol">✳</div><div><strong>Welcome to the conversation.</strong><span>Say hello, share an idea, or just listen in.</span></div><span class="welcome-tag">OPEN TO ALL</span></div>
+      <div class="welcome-strip"><div class="welcome-symbol">✳</div><div><strong>A good conversation starts with hello.</strong><span>Meet someone new, share what you’re thinking, or just hang out.</span></div><span class="welcome-tag">NO SIGN-UP NEEDED</span></div>
       <section id="messages" class="messages" aria-live="polite" aria-relevant="additions text" aria-label="Messages"><div class="loading-state">Connecting to the room…</div></section>
       <div id="typing-line" class="typing-line" aria-live="polite"></div>
       <div id="emoji-picker" class="emoji-picker" role="dialog" aria-label="Choose an emoji" hidden></div>

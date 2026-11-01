@@ -7,6 +7,8 @@ A clean, responsive real-time messaging app built with HTML, CSS, JavaScript, an
 - Email/password authentication with Supabase Auth
 - Public chat rooms: General, Coding, and Random
 - Create additional public rooms
+- Private one-to-one direct messages
+- Private file sharing in direct messages (images, PDFs, and text files up to 10 MB)
 - Real-time message delivery with Supabase Realtime / Postgres Changes
 - Online user count with Realtime Presence
 - Typing indicators with Realtime Broadcast
@@ -44,4 +46,4 @@ A GitHub Actions workflow validates the JavaScript module syntax, checks require
 
 ## Current scope
 
-Rooms are public to authenticated users. Direct messages, file uploads, message editing, moderation, and push notifications are not included in this first version.
+Public rooms are visible to authenticated users. Direct messages are restricted to their two participants. Attachments use a private Storage bucket with membership-based access policies and one-hour signed download URLs. Message editing, moderation, and push notifications are not included yet.

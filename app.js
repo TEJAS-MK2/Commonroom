@@ -312,13 +312,18 @@ $("#message-form").addEventListener("submit", async (event) => {
   const button = $("#send-button"); button.disabled = true;
   try {
     const token = createEditToken();
-    const { data, error } = await supabase.from("chat_guest_messages").insert({
-      room_id: state.activeRoom.id, sender_key: state.senderKey, sender_name: state.name, body,
-      reply_to: state.replyTarget?.id || null, edit_token_hash: await hashEditToken(token)
-    }).select("id").single();
+    const { data, error } = await supabase.rpc("create_guest_message", {
+      p_room_id: state.activeRoom.id,
+      p_sender_key: state.senderKey,
+      p_sender_name: state.name,
+      p_body: body,
+      p_reply_to: state.replyTarget?.id || null,
+      p_token_hash: await hashEditToken(token)
+    });
     if (error) throw error;
-    if (data?.id) {
-      state.editTokens[data.id] = token;
+    const messageId = typeof data === "string" ? data : data?.id;
+    if (messageId) {
+      state.editTokens[messageId] = token;
       storage.set("commonroom-edit-tokens", JSON.stringify(state.editTokens));
     }
     input.value = ""; clearReplyTarget(); input.focus();
@@ -361,7 +366,9 @@ document.addEventListener("keydown", (event) => {
   }
 });
 window.addEventListener("pagehide", () => {
-  if (state.presence) supabase.removeChannel(state.presence);
+  for (const channel of [state.messageChannel, state.typingChannel, state.presence, state.reactionChannel, state.roomsChannel]) {
+    if (channel) supabase.removeChannel(channel);
+  }
 });
 askForName();
 $("#my-name").textContent = state.name;
@@ -412,19 +419,24 @@ async function toggleReaction(messageId, emoji) {
     state.reactions = state.reactions.filter((item) => item.id !== current.id);
   } else {
     const token = createEditToken();
-    const result = await supabase.from("chat_guest_reactions").insert({
-      message_id: messageId, sender_key: state.senderKey, emoji,
-      reaction_token_hash: await hashEditToken(token)
-    }).select("id,message_id,sender_key,emoji").single();
+    const result = await supabase.rpc("create_guest_reaction", {
+      p_message_id: messageId,
+      p_sender_key: state.senderKey,
+      p_emoji: emoji,
+      p_token_hash: await hashEditToken(token)
+    });
+    const created = typeof result.data === "string"
+      ? { id: result.data, message_id: messageId, sender_key: state.senderKey, emoji }
+      : result.data;
     if (result.error?.code === "23505") {
       toast("That reaction already exists for this device key. Refresh the room before trying again.");
       return;
     }
     if (result.error) throw result.error;
-    if (result.data) {
+    if (created) {
       state.reactionTokens[tokenKey] = token;
       storage.set("commonroom-reaction-tokens", JSON.stringify(state.reactionTokens));
-      if (!state.reactions.some((item) => item.id === result.data.id)) state.reactions.push(result.data);
+      if (!state.reactions.some((item) => item.id === created.id)) state.reactions.push(created);
     }
   }
   renderMessages();
@@ -525,6 +537,18 @@ function createEditToken() {
 async function hashEditToken(token) {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(token));
   return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+function pruneMessageTokens(messageId) {
+  if (Object.prototype.hasOwnProperty.call(state.editTokens, messageId)) {
+    delete state.editTokens[messageId];
+    storage.set("commonroom-edit-tokens", JSON.stringify(state.editTokens));
+  }
+  const prefix = messageId + ":";
+  let changed = false;
+  for (const key of Object.keys(state.reactionTokens || {})) {
+    if (key.startsWith(prefix)) { delete state.reactionTokens[key]; changed = true; }
+  }
+  if (changed) storage.set("commonroom-reaction-tokens", JSON.stringify(state.reactionTokens));
 }
 function clearReplyTarget() {
   state.replyTarget = null;

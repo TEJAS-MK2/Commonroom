@@ -52,13 +52,20 @@ function setName(name) {
   $("#my-avatar").textContent = initials(clean);
 }
 function askForName() {
-  let name = window.prompt("Choose a display name (2–32 characters):", state.name || "Guest");
-  if (name === null && !state.name) name = "Guest";
-  if (name !== null) {
-    try { setName(name); }
-    catch (error) { toast(error.message); if (!state.name) setName("Guest"); }
+  if (state.name && state.name.trim().length >= 2) {
+    setName(state.name);
+    return;
   }
-  if (!state.name) setName("Guest");
+  const name = window.prompt("Choose a display name (2–32 characters):", "Guest");
+  if (name === null || !name.trim()) {
+    setName("Guest");
+    return;
+  }
+  try { setName(name); }
+  catch (error) {
+    toast(error.message);
+    setName("Guest");
+  }
 }
 function renderRooms() {
   $("#room-count").textContent = String(state.rooms.length).padStart(2, "0");

@@ -225,9 +225,12 @@ $("#sign-out").addEventListener("click", async () => {
 });
 $("#mobile-menu").addEventListener("click", () => $(".sidebar").classList.toggle("open"));
 
-supabase.auth.onAuthStateChange((_event, session) => {
-  if (!session) { showApp(false); return; }
-  if (!state.user) startApp(session.user).catch((error) => toast(error.message));
+supabase.auth.onAuthStateChange((event) => {
+  if (event === "SIGNED_OUT") {
+    state.user = null;
+    state.profile = null;
+    showApp(false);
+  }
 });
 const { data: { session } } = await supabase.auth.getSession();
 if (session?.user) {

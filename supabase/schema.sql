@@ -599,3 +599,7 @@ revoke all on function public.enforce_chat_api_rate_limit() from public, anon, a
 grant execute on function public.enforce_chat_api_rate_limit() to authenticator;
 alter role authenticator set pgrst.db_pre_request = 'public.enforce_chat_api_rate_limit';
 notify pgrst, 'reload config';
+
+
+-- The pre-request hook runs after the request role is selected by PostgREST.
+grant execute on function public.enforce_chat_api_rate_limit() to anon, authenticated, authenticator;

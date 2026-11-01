@@ -1,49 +1,44 @@
-# Chat
+# Commonroom
 
-A clean, responsive real-time messaging app built with HTML, CSS, JavaScript, and Supabase.\n\n**Live app:** https://tejas-mk2.github.io/Chat/
+An open, real-time community chat built with HTML, CSS, JavaScript, and Supabase. No accounts, email addresses, passwords, or sign-in screen are required.
+
+**Live app:** https://tejas-mk2.github.io/Chat/
 
 ## Features
 
-- Email/password authentication with Supabase Auth
-- Public chat rooms: General, Coding, and Random
+- Join instantly with a locally remembered display name
+- Public channels: General, Coding, and Random
 - Create additional public rooms
-- Private one-to-one direct messages
-- Private file sharing in direct messages (images, PDFs, and text files up to 10 MB)
 - Real-time message delivery with Supabase Realtime / Postgres Changes
-- Online user count with Realtime Presence
+- Live room presence and online participant count
 - Typing indicators with Realtime Broadcast
-- Responsive desktop and mobile interface
-- Row Level Security on every application table
+- Responsive, accessible desktop and mobile interface
+- Latest 100 messages loaded per room
 
 ## Stack
 
 - HTML, CSS, JavaScript (ES modules)
-- Supabase Auth, PostgreSQL, Realtime
+- Supabase PostgreSQL and Realtime
 - Supabase JavaScript SDK loaded from a pinned ESM CDN version
 
 ## Setup
 
-The connected Supabase project is already configured in `supabase/config.js`.
-
-1. In Supabase Dashboard → Authentication → Providers, make sure Email authentication is enabled.
-2. The schema is in `supabase/schema.sql`. It has been applied to the connected project using isolated `chat_*` tables, so existing project tables are not overwritten.
-3. Serve the repository with a local static web server:
-
+1. Configure `SUPABASE_URL` and the browser-safe `SUPABASE_PUBLISHABLE_KEY` in `supabase/config.js`.
+2. Apply the SQL in `supabase/schema.sql` to the Supabase project. The anonymous-chat migration creates `chat_guest_messages`, enables RLS, and grants the `anon` role only the public room/message operations required by this app.
+3. In Supabase Dashboard → API → API Settings, ensure the Data API exposes the `public` schema and the `anon` role has the required table grants (the SQL includes explicit grants).
+4. Ensure Realtime is enabled for `public.chat_guest_messages` (the schema adds it to `supabase_realtime`).
+5. Serve the repository locally:
    ```bash
    python -m http.server 8000
    ```
+6. Open http://localhost:8000.
 
-4. Open http://localhost:8000 and create an account.
-5. In Supabase Dashboard → Authentication → URL Configuration, set the Site URL to `https://tejas-mk2.github.io/Chat/` and add that URL plus your local development URL to the Redirect URLs allowlist.\n6. If email confirmation is enabled, confirm your email before signing in.\n7. Recommended: enable leaked-password protection under Authentication → Password Security.
+## Privacy and abuse considerations
 
-## Security
+This is intentionally a **public, anonymous chat**. Messages, display names, room names, and room presence are visible to anyone who can access the app. A display name is not verified identity and can be impersonated. The sender key is a random browser-local identifier used only to distinguish a visitor's own messages; it is not authentication.
 
-The browser uses only a Supabase publishable key, which is intended for client-side use. Never add a `service_role` or secret key to frontend code. All application tables have Row Level Security enabled. Users can only create messages with their own authenticated user ID.
+Because there is no account identity, this version does not offer private DMs or private file attachments. Public anonymous posting can attract spam or abuse; before sharing widely, add server-side rate limiting, moderation/reporting, and retention controls (for example through a trusted Edge Function or another server-side boundary). Never put a Supabase service-role or secret key in browser code.
 
 ## Deployment
 
-A GitHub Actions workflow validates the JavaScript module syntax, checks required HTML elements and verifies that no privileged Supabase key is included in the browser bundle. On pushes to `main`, it assembles and deploys the static site to GitHub Pages. The workflow uses the GitHub Pages Actions deployment flow; ensure Pages is enabled for the repository and configured to use GitHub Actions.
-
-## Current scope
-
-Public rooms are visible to authenticated users. Direct messages are restricted to their two participants. Attachments use a private Storage bucket with membership-based access policies and one-hour signed download URLs. Message editing, moderation, and push notifications are not included yet.
+GitHub Actions validates JavaScript module syntax, checks required HTML IDs, verifies that no privileged Supabase key is included in the browser configuration, and deploys the static site to GitHub Pages on pushes to `main`.

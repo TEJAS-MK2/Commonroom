@@ -305,7 +305,7 @@ function openEmojiPicker(target, anchor) {
   }
   state.pickerTarget = target;
   picker.innerHTML = '<div class="emoji-picker-head"><strong>' + (target.kind === "reaction" ? "React to message" : "Add an emoji") + '</strong><button type="button" class="picker-close" aria-label="Close">×</button></div><div class="emoji-grid">' +
-    pickerEmojis.map((emoji) => '<button type="button" data-pick-emoji="' + emoji + '" aria-label="' + emoji + '">' + emoji + '</button>').join("") + '</div>';
+    (target.kind === "reaction" ? reactionEmojis : pickerEmojis).map((emoji) => '<button type="button" data-pick-emoji="' + emoji + '" aria-label="' + emoji + '">' + emoji + '</button>').join("") + '</div>';
   const rect = anchor.getBoundingClientRect();
   picker.style.left = Math.max(12, Math.min(rect.left, window.innerWidth - 270)) + "px";
   picker.style.top = Math.max(12, Math.min(rect.top - 245, window.innerHeight - 235)) + "px";
@@ -396,3 +396,5 @@ $("#emoji-button").addEventListener("click", (event) => {
   openEmojiPicker({ kind: "composer", id: "composer" }, event.currentTarget);
 });
 window.addEventListener("resize", closePopovers);
+
+if (state.activeRoom) selectRoom(state.activeRoom.id).catch((error) => toast(error.message || "Could not load reactions."));

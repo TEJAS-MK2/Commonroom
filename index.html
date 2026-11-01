@@ -19,7 +19,7 @@
     <aside class="sidebar" id="sidebar">
       <div class="brand-row">
         <a class="brand" href="#" aria-label="Commonroom home"><span class="brand-mark">c</span><span>commonroom<span class="brand-period">.</span></span></a>
-        <button id="new-room" class="icon-button" type="button" aria-label="Create a room" title="Create a room">＋</button>
+        <div class="brand-actions"><button id="admin-open" class="admin-launch" type="button" aria-label="Open admin control room" title="Admin control room"><span>⌘</span><b>Control room</b></button><button id="new-room" class="icon-button" type="button" aria-label="Create a room" title="Create a room">＋</button></div>
       </div>
       <div class="workspace-card"><span class="workspace-icon">✳</span><div><strong>Public lounge</strong><span>No account. Just conversation.</span></div><i class="live-dot"></i></div>
       <div class="section-heading"><span>CHANNELS</span><span class="section-count" id="room-count">03</span></div>
@@ -54,7 +54,47 @@
       </form>
       <footer class="composer-footer"><span>Be kind. Be curious. Keep it constructive.</span><span>COMMONROOM <b>·</b> REAL-TIME CHAT</span></footer>
     </section>
-    <div id="toast" class="toast" role="status"></div>
+    <div id="admin-overlay" class="admin-overlay" hidden>
+    <section class="admin-frame" role="dialog" aria-modal="true" aria-labelledby="admin-title">
+      <header class="admin-topbar">
+        <div class="admin-brand"><span class="admin-brand-mark">C</span><div><strong id="admin-title">Commonroom <em>Control</em></strong><small>PRIVATE ADMINISTRATION</small></div></div>
+        <div class="admin-top-actions"><span class="admin-secure-label"><i></i> SECURE SESSION</span><button id="admin-close" class="admin-icon-button" type="button" aria-label="Close control room">×</button></div>
+      </header>
+      <section id="admin-login-view" class="admin-login-view">
+        <div class="admin-login-card">
+          <span class="admin-eyebrow">RESTRICTED AREA</span><div class="admin-login-icon">⌁</div>
+          <h2>Welcome back, admin.</h2><p>Enter your four-digit access PIN to open the control room.</p>
+          <form id="admin-login-form">
+            <label for="admin-pin">ACCESS PIN</label>
+            <input id="admin-pin" type="password" inputmode="numeric" autocomplete="one-time-code" maxlength="4" pattern="[0-9]{4}" placeholder="••••" required />
+            <p id="admin-login-error" class="admin-login-error" role="alert"></p>
+            <button class="admin-primary-button" type="submit"><span>Unlock control room</span><b>↗</b></button>
+          </form>
+          <small class="admin-login-foot">Access is rate-limited. Sessions expire automatically.</small>
+        </div>
+      </section>
+      <section id="admin-dashboard" class="admin-dashboard" hidden>
+        <aside class="admin-sidebar">
+          <div class="admin-side-caption">WORKSPACE</div>
+          <nav class="admin-nav" aria-label="Admin sections">
+            <button type="button" data-admin-tab="overview" class="active"><span>◫</span> Overview</button>
+            <button type="button" data-admin-tab="messages"><span>▤</span> Messages</button>
+            <button type="button" data-admin-tab="reports"><span>⚑</span> Reports <i id="admin-report-count">0</i></button>
+            <button type="button" data-admin-tab="rooms"><span>▦</span> Rooms</button>
+            <button type="button" data-admin-tab="audit"><span>⌁</span> Activity log</button>
+          </nav>
+          <div class="admin-side-bottom"><span class="admin-live-indicator"></span><div><b>System operational</b><small>Commonroom / Production</small></div></div>
+        </aside>
+        <main class="admin-main">
+          <div class="admin-content-top"><div><span class="admin-eyebrow">ADMINISTRATION / <span id="admin-current-section">OVERVIEW</span></span><h2 id="admin-page-title">Command overview</h2><p id="admin-page-subtitle">A live snapshot of your community.</p></div>
+            <div class="admin-toolbar"><button id="admin-export" class="admin-secondary-button" type="button">↓ Export</button><button id="admin-refresh" class="admin-primary-button compact" type="button">↻ Refresh</button></div>
+          </div>
+          <div id="admin-content" class="admin-content"><div class="admin-loading">Loading secure dashboard…</div></div>
+        </main>
+      </section>
+    </section>
+  </div>
+  <div id="toast" class="toast" role="status"></div>
   </main>
 </body>
 </html>

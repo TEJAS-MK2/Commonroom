@@ -107,7 +107,7 @@ Commonroom is a **public anonymous chat**, not a private messaging service.
 - Display names are not verified identities and can be impersonated.
 - A random browser-local sender key distinguishes a visitor's messages. It is not authentication and can be reset or spoofed.
 - Message edit/delete ownership uses a random token kept in that browser's local storage; only its SHA-256 hash is stored with the message. Clearing site data or changing browsers can remove the ability to manage an earlier message.
-- Database triggers apply best-effort message/reaction limits keyed by a browser-provided sender key; this is still spoofable and is not IP-level enforcement. Do not treat it as a complete anti-abuse system.
+- Database triggers apply per-browser duplicate and burst checks. A PostgREST pre-request hook also enforces a 100-write / five-minute per-IP ceiling on Commonroom message, reaction, room, and message-management endpoints. Network-level controls can still be bypassed with distributed IPs or VPNs; they are abuse friction, not identity verification.
 - Public room creation is globally capped at 100 rooms and five creations per minute. This is a shared safety ceiling, not per-visitor identity-based quota.
 - Reaction removal uses a random browser-held token and a server-side hash check. Older reactions created before this protection may not be removable from the original device.
 - Do not use Commonroom to share passwords, financial information, personal records, or other sensitive content.

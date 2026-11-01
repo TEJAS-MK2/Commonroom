@@ -518,6 +518,7 @@ function renderMessages() {
     const canManage = mine && !!state.editTokens[message.id];
     const meta = grouped ? "" : '<div class="message-meta"><button class="message-author" type="button" data-profile="' + escapeHtml(name) + '" data-sender="' + message.sender_key + '">' + escapeHtml(name) + '</button>' + (mine ? '<span class="you-tag">YOU</span>' : '') + '<time>' + formatTime(message.created_at) + '</time>' + (message.edited_at ? '<span class="edited-tag">edited</span>' : '') + '</div>';
     const actions = '<div class="message-actions"><button type="button" data-reply="' + message.id + '">↩ Reply' + (replies ? ' · ' + replies : '') + '</button><button type="button" data-add-reaction="' + message.id + '">☺ React</button>' +
+      (!mine ? '<button type="button" data-report="' + message.id + '">⚑ Report</button>' : '') +
       (canManage ? '<button type="button" data-edit="' + message.id + '">Edit</button><button type="button" data-delete="' + message.id + '">Delete</button>' : '') + '</div>';
     return separator + '<article class="message ' + (mine ? 'mine ' : '') + (grouped ? 'grouped' : '') + '" id="message-' + message.id + '" data-message-card="' + message.id + '">' +
       '<button class="avatar message-avatar ' + (mine ? 'self-avatar' : '') + '" type="button" data-profile="' + escapeHtml(name) + '" data-sender="' + message.sender_key + '">' + (grouped ? '' : escapeHtml(initials(name))) + '</button>' +
@@ -582,3 +583,169 @@ $("#messages").addEventListener("click", async (event) => {
 $("#reply-context").addEventListener("click", (event) => { if (event.target.closest("#cancel-reply")) clearReplyTarget(); });
 
 if (state.activeRoom) selectRoom(state.activeRoom.id).catch((error) => toast(error.message || "Could not load reactions."));
+
+
+/* Admin Control Room — all privileged reads/writes go through session-checked RPCs. */
+const adminUi = { token: null, data: null, tab: "overview", search: "" };
+const adminSections = {
+  overview: ["Command overview", "A live snapshot of your community."],
+  messages: ["Message moderation", "Review recent conversation activity and remove harmful content."],
+  reports: ["Report queue", "Investigate community reports and record moderation outcomes."],
+  rooms: ["Room management", "Manage public spaces and keep the community organised."],
+  audit: ["Admin activity", "A traceable record of control-room actions."]
+};
+function adminEscape(value) { return escapeHtml(value == null ? "" : String(value)); }
+function adminDate(value) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat(undefined,{dateStyle:"medium",timeStyle:"short"}).format(new Date(value));
+}
+function adminSetView(unlocked) {
+  $("#admin-login-view").hidden = unlocked;
+  $("#admin-dashboard").hidden = !unlocked;
+  if (!unlocked) setTimeout(() => $("#admin-pin").focus(), 50);
+}
+function adminOpen() {
+  $("#admin-overlay").hidden = false;
+  document.body.classList.add("admin-open");
+  adminSetView(!!adminUi.token);
+  if (adminUi.token) adminLoad();
+}
+async function adminClose() {
+  if (adminUi.token) {
+    const token = adminUi.token;
+    adminUi.token = null; adminUi.data = null;
+    await supabase.rpc("admin_logout",{p_token:token}).catch(()=>{});
+  }
+  $("#admin-overlay").hidden = true;
+  document.body.classList.remove("admin-open");
+  $("#admin-pin").value = "";
+  $("#admin-login-error").textContent = "";
+}
+function adminSetTab(tab) {
+  if (!adminSections[tab]) return;
+  adminUi.tab = tab;
+  document.querySelectorAll("[data-admin-tab]").forEach((button)=>button.classList.toggle("active",button.dataset.adminTab===tab));
+  $("#admin-page-title").textContent = adminSections[tab][0];
+  $("#admin-page-subtitle").textContent = adminSections[tab][1];
+  $("#admin-current-section").textContent = tab.toUpperCase();
+  adminRender();
+}
+async function adminLoad() {
+  if (!adminUi.token) return;
+  $("#admin-content").innerHTML = '<div class="admin-loading"><span></span> Syncing live community data…</div>';
+  const {data,error}=await supabase.rpc("admin_overview",{p_token:adminUi.token});
+  if (error) {
+    if (error.message?.toLowerCase().includes("session expired") || error.code==="28000") {
+      adminUi.token=null; adminUi.data=null; adminSetView(false);
+      $("#admin-login-error").textContent="Your admin session expired. Sign in again.";
+      return;
+    }
+    $("#admin-content").innerHTML='<div class="admin-empty-state">Could not load the control room: '+adminEscape(error.message)+'</div>';
+    return;
+  }
+  adminUi.data=data;
+  $("#admin-report-count").textContent=String(data.stats?.open_reports||0);
+  adminRender();
+}
+function adminRender() {
+  const d=adminUi.data;
+  if (!d) return;
+  const messages=d.messages||[], reports=d.reports||[], rooms=d.rooms||[], audit=d.audit||[];
+  const term=adminUi.search.trim().toLowerCase();
+  const metric=(label,value,sub,icon)=>'<article class="admin-metric"><div class="admin-metric-top"><span>'+label+'</span><i>'+icon+'</i></div><strong>'+Number(value||0).toLocaleString()+'</strong><small>'+sub+'</small></article>';
+  if(adminUi.tab==="overview") {
+    $("#admin-content").innerHTML='<div class="admin-metrics">'+
+      metric("Total messages",d.stats.messages,"Across all public rooms","▤")+
+      metric("Messages today",d.stats.messages_today,"Since local database day start","↗")+
+      metric("Public rooms",d.stats.rooms,"Community spaces","▦")+
+      metric("Open reports",d.stats.open_reports,"Awaiting moderation","⚑")+
+      '</div><div class="admin-two-column"><section class="admin-panel"><div class="admin-panel-head"><div><span class="admin-eyebrow">COMMUNITY PULSE</span><h3>Recent messages</h3></div><button data-admin-tab="messages" class="admin-text-button">View all ↗</button></div>'+
+      (messages.slice(0,6).map(m=>'<article class="admin-activity-row"><div class="admin-activity-avatar">'+adminEscape(initials(m.sender_name))+'</div><div class="admin-activity-copy"><b>'+adminEscape(m.sender_name)+' <span>in #'+adminEscape(m.room_name)+'</span></b><p>'+adminEscape(m.body)+'</p></div><time>'+adminEscape(adminDate(m.created_at))+'</time></article>').join("")||'<div class="admin-empty-state">No messages yet.</div>')+
+      '</section><section class="admin-panel"><div class="admin-panel-head"><div><span class="admin-eyebrow">NEEDS ATTENTION</span><h3>Moderation queue</h3></div><button data-admin-tab="reports" class="admin-text-button">Open queue ↗</button></div>'+
+      (reports.slice(0,5).map(r=>'<article class="admin-report-mini"><span class="admin-report-mark">⚑</span><div><b>'+adminEscape(r.reason)+'</b><p>'+adminEscape(r.sender_name||"Deleted message")+' · '+adminEscape(r.room_name||"Unknown room")+'</p></div></article>').join("")||'<div class="admin-empty-state">All clear. No open reports.</div>')+
+      '</section></div><section class="admin-panel admin-wide-panel"><div class="admin-panel-head"><div><span class="admin-eyebrow">ROOM DIRECTORY</span><h3>Community spaces</h3></div><button data-admin-tab="rooms" class="admin-text-button">Manage rooms ↗</button></div><div class="admin-room-chips">'+rooms.map(r=>'<span># '+adminEscape(r.name)+'</span>').join("")+'</div></section>';
+  } else if(adminUi.tab==="messages") {
+    const rows=messages.filter(m=>!term||[m.sender_name,m.room_name,m.body].join(" ").toLowerCase().includes(term));
+    $("#admin-content").innerHTML='<div class="admin-panel"><div class="admin-panel-head"><div><span class="admin-eyebrow">CONTENT MODERATION</span><h3>Recent public messages</h3></div><label class="admin-search"><span>⌕</span><input id="admin-search" value="'+adminEscape(adminUi.search)+'" placeholder="Search messages…" /></label></div>'+
+      (rows.map(m=>'<article class="admin-message-row"><div class="admin-message-meta"><b>'+adminEscape(m.sender_name)+'</b><span># '+adminEscape(m.room_name)+'</span><time>'+adminEscape(adminDate(m.created_at))+'</time></div><p>'+adminEscape(m.body)+'</p><button class="admin-danger-button" data-admin-delete-message="'+m.id+'">Delete message</button></article>').join("")||'<div class="admin-empty-state">No matching messages.</div>')+'</div>';
+  } else if(adminUi.tab==="reports") {
+    $("#admin-content").innerHTML='<div class="admin-panel"><div class="admin-panel-head"><div><span class="admin-eyebrow">COMMUNITY SAFETY</span><h3>Open reports <span class="admin-inline-count">'+reports.length+'</span></h3></div></div>'+
+      (reports.map(r=>'<article class="admin-report-row"><div class="admin-report-head"><span class="admin-report-tag">'+adminEscape(r.reason)+'</span><time>'+adminEscape(adminDate(r.created_at))+'</time></div><div class="admin-report-context"><b>'+adminEscape(r.sender_name||"Message unavailable")+' · #'+adminEscape(r.room_name||"unknown")+'</b><p>'+adminEscape(r.body||"The reported message is no longer available.")+'</p>'+(r.details?'<small>Reporter note: '+adminEscape(r.details)+'</small>':'')+'</div><div class="admin-row-actions"><button class="admin-secondary-button" data-admin-resolve="'+r.id+'" data-status="dismissed">Dismiss</button><button class="admin-primary-button compact" data-admin-resolve="'+r.id+'" data-status="reviewed">Mark reviewed</button>'+(r.message_id?'<button class="admin-danger-button" data-admin-delete-message="'+r.message_id+'">Remove message</button>':'')+'</div></article>').join("")||'<div class="admin-empty-state">Nothing in the queue. Nice work keeping things civil.</div>')+'</div>';
+  } else if(adminUi.tab==="rooms") {
+    $("#admin-content").innerHTML='<div class="admin-room-grid">'+rooms.map(r=>'<article class="admin-room-card"><div class="admin-room-card-top"><span class="admin-room-icon">#</span><span class="admin-room-slug">'+adminEscape(r.slug)+'</span></div><h3>'+adminEscape(r.name)+'</h3><p>'+adminEscape(r.description||"No description yet.")+'</p><small>Created '+adminEscape(adminDate(r.created_at))+'</small><div class="admin-row-actions"><button class="admin-secondary-button" data-admin-edit-room="'+r.id+'" data-name="'+adminEscape(r.name)+'" data-description="'+adminEscape(r.description||"")+'">Edit details</button>'+(r.slug==="general"?'':'<button class="admin-danger-button" data-admin-delete-room="'+r.id+'">Delete</button>')+'</div></article>').join("")+'</div>';
+  } else {
+    $("#admin-content").innerHTML='<div class="admin-panel"><div class="admin-panel-head"><div><span class="admin-eyebrow">SECURITY & ACCOUNTABILITY</span><h3>Recent admin actions</h3></div></div>'+
+      (audit.map(a=>'<article class="admin-audit-row"><span class="admin-audit-dot"></span><div><b>'+adminEscape(a.action.replace(/_/g," "))+'</b><small>'+adminEscape(a.target_id||"Control room session")+'</small></div><time>'+adminEscape(adminDate(a.created_at))+'</time></article>').join("")||'<div class="admin-empty-state">No admin actions recorded yet.</div>')+'</div>';
+  }
+  const search=$("#admin-search");
+  if(search) search.addEventListener("input",()=>{adminUi.search=search.value;const pos=search.selectionStart;adminRender();const next=$("#admin-search");next?.focus();next?.setSelectionRange(pos,pos);});
+}
+async function adminAction(name,args,successMessage) {
+  const {data,error}=await supabase.rpc(name,{p_token:adminUi.token,...args});
+  if(error) { toast(error.message||"Admin action failed."); return false; }
+  if(data!==true) { toast("The requested change was not applied."); return false; }
+  toast(successMessage); await adminLoad(); return true;
+}
+$("#admin-open").addEventListener("click",adminOpen);
+$("#admin-close").addEventListener("click",adminClose);
+$("#admin-overlay").addEventListener("click",(event)=>{if(event.target===$("#admin-overlay"))adminClose();});
+$("#admin-login-form").addEventListener("submit",async(event)=>{
+  event.preventDefault();
+  const button=event.currentTarget.querySelector("button[type=submit]");
+  const pin=$("#admin-pin").value;
+  $("#admin-login-error").textContent="";
+  button.disabled=true;button.classList.add("loading");
+  const {data,error}=await supabase.rpc("admin_login",{p_pin:pin});
+  button.disabled=false;button.classList.remove("loading");
+  if(error||!data?.ok) {
+    $("#admin-login-error").textContent=data?.error||error?.message||"Could not verify the PIN.";
+    $("#admin-pin").value="";$("#admin-pin").focus();return;
+  }
+  adminUi.token=data.token;adminUi.search="";adminSetView(true);adminSetTab("overview");await adminLoad();
+});
+document.querySelectorAll("[data-admin-tab]").forEach(button=>button.addEventListener("click",()=>adminSetTab(button.dataset.adminTab)));
+$("#admin-refresh").addEventListener("click",adminLoad);
+$("#admin-export").addEventListener("click",()=>{
+  if(!adminUi.data)return;
+  const blob=new Blob([JSON.stringify(adminUi.data,null,2)],{type:"application/json"});
+  const url=URL.createObjectURL(blob);const link=document.createElement("a");
+  link.href=url;link.download="commonroom-admin-snapshot-"+new Date().toISOString().slice(0,10)+".json";
+  link.click();URL.revokeObjectURL(url);toast("Admin snapshot exported.");
+});
+$("#admin-content").addEventListener("click",async(event)=>{
+  const tab=event.target.closest("[data-admin-tab]");
+  if(tab){adminSetTab(tab.dataset.adminTab);return;}
+  const delMessage=event.target.closest("[data-admin-delete-message]");
+  if(delMessage){
+    if(!confirm("Permanently delete this public message and its attached reports?"))return;
+    await adminAction("admin_delete_message",{p_message_id:delMessage.dataset.adminDeleteMessage},"Message removed.");return;
+  }
+  const resolve=event.target.closest("[data-admin-resolve]");
+  if(resolve){await adminAction("admin_resolve_report",{p_report_id:resolve.dataset.adminResolve,p_status:resolve.dataset.status},"Report updated.");return;}
+  const delRoom=event.target.closest("[data-admin-delete-room]");
+  if(delRoom){
+    if(!confirm("Delete this room and all of its messages? This cannot be undone."))return;
+    await adminAction("admin_delete_room",{p_room_id:delRoom.dataset.adminDeleteRoom},"Room deleted.");return;
+  }
+  const editRoom=event.target.closest("[data-admin-edit-room]");
+  if(editRoom){
+    const name=prompt("Room name (2–40 characters):",editRoom.dataset.name);if(name===null)return;
+    const description=prompt("Room description (up to 180 characters):",editRoom.dataset.description);if(description===null)return;
+    await adminAction("admin_update_room",{p_room_id:editRoom.dataset.adminEditRoom,p_name:name,p_description:description},"Room updated.");
+  }
+});
+document.addEventListener("keydown",(event)=>{
+  if(event.key==="Escape"&&!$("#admin-overlay").hidden)adminClose();
+});
+$("#messages").addEventListener("click",async(event)=>{
+  const report=event.target.closest("[data-report]");
+  if(!report)return;
+  const reason=prompt("Report reason: spam, harassment, hate, personal-info, or other","spam");
+  if(reason===null)return;
+  const cleanReason=reason.trim().toLowerCase();
+  if(!["spam","harassment","hate","personal-info","other"].includes(cleanReason)){toast("Choose spam, harassment, hate, personal-info, or other.");return;}
+  const details=prompt("Optional note (up to 300 characters):","")||"";
+  const {data,error}=await supabase.rpc("submit_guest_report",{p_message_id:report.dataset.report,p_reporter_key:state.senderKey,p_reason:cleanReason,p_details:details.slice(0,300)});
+  if(error)toast(error.message||"Could not submit report.");
+  else toast(data?"Report sent to the moderation team.":"You have already reported this message.");
+});

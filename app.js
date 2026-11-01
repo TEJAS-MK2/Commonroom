@@ -27,6 +27,12 @@ function escapeHtml(value = "") {
 function initials(name = "Guest") {
   return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "G";
 }
+function setConnectionStatus(label, stateName = "live") {
+  const node = $("#connection-status");
+  if (!node) return;
+  node.innerHTML = '<i class="live-dot"></i>' + escapeHtml(label);
+  node.dataset.state = stateName;
+}
 function toast(message) {
   const node = $("#toast"); node.textContent = message; node.classList.add("show");
   clearTimeout(toast.timer); toast.timer = setTimeout(() => node.classList.remove("show"), 3000);
@@ -89,6 +95,7 @@ async function selectRoom(roomId) {
   if (state.messageChannel) await supabase.removeChannel(state.messageChannel);
   if (state.typingChannel) await supabase.removeChannel(state.typingChannel);
   state.activeRoom = room;
+  setConnectionStatus("Connecting", "pending");
   state.messages = [];
   $("#active-room-name").textContent = room.name;
   $("#room-description").textContent = room.description || "A place to talk.";
@@ -108,6 +115,7 @@ async function selectRoom(roomId) {
     }
   });
   const messageReady = await waitForSubscription(state.messageChannel);
+  setConnectionStatus(messageReady ? "Live" : "Reconnecting", messageReady ? "live" : "warning");
   if (!messageReady) toast("Live updates are taking longer than expected.");
 
   state.typingChannel = supabase.channel(`commonroom-typing:${room.id}`);

@@ -389,6 +389,12 @@ $("#sign-out").addEventListener("click", async () => {
   await supabase.auth.signOut(); state.user = null; state.profile = null; state.activeRoom = null; showApp(false);
 });
 $("#mobile-menu").addEventListener("click", () => $(".sidebar").classList.toggle("open"));
+$("#new-dm").addEventListener("click", () => {
+  const list = $("#direct-list");
+  list.classList.remove("collapsed");
+  list.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  if (!state.profiles.length) toast("No other members have joined yet.");
+});
 
 supabase.auth.onAuthStateChange((event) => {
   if (event === "SIGNED_OUT") {

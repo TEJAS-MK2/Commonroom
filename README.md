@@ -26,7 +26,9 @@ Commonroom keeps the experience intentionally simple: choose a room, meet the pe
 - Emoji reactions and an emoji picker
 - Message replies with jump-to-original context
 - Edit and delete controls for messages from the original browser
-- Responsive desktop and mobile navigation
+- Responsive desktop, tablet, and mobile layouts with touch-aware controls
+- Room creation guardrails (100-room cap and five new rooms per minute globally)
+- Token-protected reaction removal; reactions cannot be deleted by arbitrary public requests
 - Keyboard focus states and reduced-motion support
 - Recent message history, with the latest 100 messages loaded per room
 
@@ -105,7 +107,9 @@ Commonroom is a **public anonymous chat**, not a private messaging service.
 - Display names are not verified identities and can be impersonated.
 - A random browser-local sender key distinguishes a visitor's messages. It is not authentication and can be reset or spoofed.
 - Message edit/delete ownership uses a random token kept in that browser's local storage; only its SHA-256 hash is stored with the message. Clearing site data or changing browsers can remove the ability to manage an earlier message.
-- Database triggers apply best-effort rate limits and duplicate-message checks. They do not provide verified identity, IP-level enforcement, or a guarantee against abuse.
+- Database triggers apply best-effort message/reaction limits keyed by a browser-provided sender key; this is still spoofable and is not IP-level enforcement. Do not treat it as a complete anti-abuse system.
+- Public room creation is globally capped at 100 rooms and five creations per minute. This is a shared safety ceiling, not per-visitor identity-based quota.
+- Reaction removal uses a random browser-held token and a server-side hash check. Older reactions created before this protection may not be removable from the original device.
 - Do not use Commonroom to share passwords, financial information, personal records, or other sensitive content.
 - There are no private direct messages or private file uploads.
 
@@ -117,12 +121,13 @@ Before opening a pull request, run:
 
 ```bash
 node --input-type=module --check < app.js
+node tests/smoke.mjs
 python -m http.server 8000
 ```
 
 Then test the application in a browser at desktop and mobile widths. Verify room switching, sending messages, replies, reactions, edit/delete ownership, presence, and navigation.
 
-GitHub Actions checks JavaScript module syntax, required HTML IDs, browser configuration, and accidental inclusion of privileged Supabase credentials. Pushes to `main` are deployed to GitHub Pages after the build succeeds.
+GitHub Actions checks JavaScript module syntax, security-sensitive interaction invariants, required HTML IDs, browser configuration, and accidental inclusion of privileged Supabase credentials. Pushes to `main` are deployed to GitHub Pages after the build succeeds.
 
 ## Project policies
 

@@ -34,7 +34,7 @@
       <header class="topbar">
         <div class="mobile-brand"><button id="mobile-menu" class="icon-button mobile-only" type="button" aria-label="Open channels">☰</button><span class="brand-mark small">c</span></div>
         <div class="channel-heading"><div class="channel-kicker"><span class="live-dot"></span> COMMUNITY CHANNEL</div><h1><span class="hash">#</span><span id="active-room-name">general</span></h1><p id="room-description">A place for everyday conversations.</p></div>
-        <div class="topbar-right"><div class="online-avatars" id="online-stack"></div><div class="online-copy"><strong id="online-count">1 online</strong><span>in this room</span></div><span class="connection-pill"><i class="live-dot"></i> Live</span></div>
+        <div class="topbar-right"><div class="online-avatars" id="online-stack"></div><div class="online-copy"><strong id="online-count">1 online</strong><span>in this room</span></div><button id="moderator-open" class="moderator-open" type="button">Moderation</button><span class="connection-pill"><i class="live-dot"></i> Live</span></div>
       </header>
 
       <div class="welcome-strip"><div class="welcome-symbol">✳</div><div><strong>Welcome to the conversation.</strong><span>Say hello, share an idea, or just listen in.</span></div><span class="welcome-tag">OPEN TO ALL</span></div>
@@ -51,6 +51,12 @@
         <button id="send-button" class="send-button" type="submit" aria-label="Send message">↑</button>
       </form>
       <footer class="composer-footer"><span>Be kind. Be curious. Keep it constructive.</span><span>COMMONROOM <b>·</b> REAL-TIME CHAT</span></footer>
+    </section>
+    <section id="moderator-panel" class="moderator-panel" hidden aria-label="Moderation center">
+      <div class="moderator-head"><div><span class="moderator-eyebrow">COMMONROOM / TRUST & SAFETY</span><h2>Moderation center</h2><p>Review reports and protect the community.</p></div><button id="moderator-close" type="button" aria-label="Close moderation">×</button></div>
+      <div class="moderator-toolbar"><span id="moderator-report-count">REPORT QUEUE</span><button id="moderator-refresh" type="button">Refresh queue</button><button id="moderator-lock" type="button">Lock</button></div>
+      <div id="moderator-reports" class="moderator-reports"><div class="moderator-empty">Enter your moderator key to load reports.</div></div>
+      <div class="moderator-foot">Moderator access is verified by the Supabase Edge Function. Never share your moderator key.</div>
     </section>
     <div id="toast" class="toast" role="status"></div>
   </main>

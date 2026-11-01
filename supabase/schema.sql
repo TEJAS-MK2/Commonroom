@@ -30,6 +30,8 @@ create index if not exists chat_messages_room_created_idx
   on public.chat_messages (room_id, created_at desc);
 create index if not exists chat_messages_sender_idx
   on public.chat_messages (sender_id);
+create index if not exists chat_rooms_created_by_idx
+  on public.chat_rooms (created_by);
 
 alter table public.chat_profiles enable row level security;
 alter table public.chat_rooms enable row level security;

@@ -38,10 +38,12 @@
       </header>
 
       <div class="welcome-strip"><div class="welcome-symbol">✳</div><div><strong>Welcome to the conversation.</strong><span>Say hello, share an idea, or just listen in.</span></div><span class="welcome-tag">OPEN TO ALL</span></div>
+      <div id="pinned-banner" class="pinned-banner" hidden></div>
       <section id="messages" class="messages" aria-live="polite" aria-label="Messages"><div class="loading-state">Connecting to the room…</div></section>
       <div id="typing-line" class="typing-line" aria-live="polite"></div>
       <div id="emoji-picker" class="emoji-picker" role="dialog" aria-label="Choose an emoji" hidden></div>
       <div id="profile-popover" class="profile-popover" hidden></div>
+      <div id="reply-context" class="reply-context" hidden></div>
       <form id="message-form" class="composer">
         <button id="emoji-button" class="composer-tool" type="button" aria-label="Add a smile" title="Add a smile">☺</button>
         <input id="message-input" maxlength="2000" autocomplete="off" placeholder="Write something thoughtful…" aria-label="Write a message" />

@@ -1202,3 +1202,5 @@ button:focus-visible,input:focus-visible,a:focus-visible {
 @media (prefers-reduced-motion: reduce) {
   *,*::before,*::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
 }
+
+.noscript-notice { margin: 16px; padding: 14px 16px; border: 1px solid rgba(240,165,160,.3); border-radius: 12px; background: rgba(240,165,160,.08); color: #f3c5c1; font-size: 13px; line-height: 1.5; }

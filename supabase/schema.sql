@@ -104,3 +104,14 @@ begin
     alter publication supabase_realtime add table public.chat_messages;
   end if;
 end $$;
+
+-- Keep transient chat broadcasts private to authenticated chat clients.
+drop policy if exists "Chat clients can receive chat broadcasts" on realtime.messages;
+create policy "Chat clients can receive chat broadcasts"
+  on realtime.messages for select to authenticated
+  using (realtime.topic() like 'chat-room:%' or realtime.topic() = 'chat-presence');
+
+drop policy if exists "Chat clients can send chat broadcasts" on realtime.messages;
+create policy "Chat clients can send chat broadcasts"
+  on realtime.messages for insert to authenticated
+  with check (realtime.topic() like 'chat-room:%' or realtime.topic() = 'chat-presence');

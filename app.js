@@ -13,7 +13,8 @@ const state = {
   name: storage.get("commonroom-name", ""),
   senderKey: storage.get("commonroom-guest-id", ""),
   rooms: [], activeRoom: null, messages: [], messageChannel: null,
-  typingChannel: null, presence: null, typingTimer: null, online: new Map(), roomSwitchToken: 0,
+  typingChannel: null, presence: null, typingTimer: null, typingTimers: new Map(), typers: new Map(),
+  lastTypingSentAt: 0, roomsChannel: null, reactionChannel: null, online: new Map(), roomSwitchToken: 0,
   reactions: [], replyTarget: null,
   editTokens: (() => { try { return JSON.parse(storage.get("commonroom-edit-tokens", "{}")) || {}; } catch { return {}; } })(),
 };
@@ -25,7 +26,8 @@ function escapeHtml(value = "") {
   return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 }
 function initials(name = "Guest") {
-  return name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]).join("").toUpperCase() || "G";
+  const words = String(name ?? "Guest").trim().split(/\s+/).filter(Boolean).slice(0, 2);
+  return words.map((part) => Array.from(part)[0] || "").join("").toUpperCase() || "G";
 }
 function setConnectionStatus(label, stateName = "live") {
   const node = $("#connection-status");
@@ -44,7 +46,7 @@ function formatDay(date) {
   return new Intl.DateTimeFormat(undefined, { weekday: "long", month: "long", day: "numeric" }).format(new Date(date));
 }
 function setName(name) {
-  const clean = name.trim().replace(/\s+/g, " ").slice(0, 32);
+  const clean = Array.from(String(name ?? "").trim().replace(/\s+/g, " ")).slice(0, 32).join("");
   if (clean.length < 2) throw new Error("Your display name needs at least 2 characters.");
   state.name = clean;
   storage.set("commonroom-name", clean);
@@ -99,14 +101,29 @@ async function waitForSubscription(channel) {
 async function selectRoom(roomId) {
   const room = state.rooms.find((item) => item.id === roomId);
   if (!room) return;
+
   const switchToken = ++state.roomSwitchToken;
-  if (state.messageChannel) await supabase.removeChannel(state.messageChannel);
+  const previousChannels = [state.messageChannel, state.typingChannel, state.presence, state.reactionChannel];
+  state.messageChannel = null;
+  state.typingChannel = null;
+  state.presence = null;
+  state.reactionChannel = null;
+  state.online.clear();
+  state.typers.clear();
+  for (const timer of state.typingTimers.values()) clearTimeout(timer);
+  state.typingTimers.clear();
+  clearTimeout(state.typingTimer);
+  state.typingTimer = null;
+  updateOnline();
+  await Promise.allSettled(previousChannels.filter(Boolean).map((channel) => supabase.removeChannel(channel)));
   if (switchToken !== state.roomSwitchToken) return;
-  if (state.typingChannel) await supabase.removeChannel(state.typingChannel);
-  if (switchToken !== state.roomSwitchToken) return;
+
   state.activeRoom = room;
-  setConnectionStatus("Connecting", "pending");
   state.messages = [];
+  state.reactions = [];
+  clearReplyTarget();
+  closePopovers();
+  setConnectionStatus("Connecting", "pending");
   $("#active-room-name").textContent = room.name;
   $("#room-description").textContent = room.description || "A place to talk.";
   $("#message-input").placeholder = `Write to #${room.name}…`;
@@ -114,30 +131,103 @@ async function selectRoom(roomId) {
   renderRooms();
   $("#messages").innerHTML = '<div class="loading-state">Loading the conversation…</div>';
 
-  state.messageChannel = supabase.channel(`commonroom-messages:${room.id}`);
-  state.messageChannel.on("postgres_changes", {
-    event: "INSERT", schema: "public", table: "chat_guest_messages", filter: `room_id=eq.${room.id}`
-  }, ({ new: message }) => {
-    if (state.activeRoom?.id === room.id && !state.messages.some((item) => item.id === message.id)) {
-      state.messages.push(message);
-      state.messages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+  const messageChannel = supabase.channel(`commonroom-messages:${room.id}`);
+  state.messageChannel = messageChannel;
+  messageChannel
+    .on("postgres_changes", {
+      event: "INSERT", schema: "public", table: "chat_guest_messages", filter: `room_id=eq.${room.id}`
+    }, ({ new: message }) => {
+      if (switchToken !== state.roomSwitchToken || state.activeRoom?.id !== room.id || !message?.id) return;
+      if (!state.messages.some((item) => item.id === message.id)) {
+        state.messages.push(message);
+        state.messages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+        renderMessages();
+      }
+    })
+    .on("postgres_changes", {
+      event: "UPDATE", schema: "public", table: "chat_guest_messages", filter: `room_id=eq.${room.id}`
+    }, ({ new: message }) => {
+      if (switchToken !== state.roomSwitchToken || state.activeRoom?.id !== room.id || !message?.id) return;
+      state.messages = state.messages.map((item) => item.id === message.id ? { ...item, ...message } : item);
       renderMessages();
-    }
-  });
-  const messageReady = await waitForSubscription(state.messageChannel);
-  if (switchToken !== state.roomSwitchToken) return;
-  setConnectionStatus(messageReady ? "Live" : "Reconnecting", messageReady ? "live" : "warning");
-  if (!messageReady) toast("Live updates are taking longer than expected.");
+    })
+    .on("postgres_changes", {
+      event: "DELETE", schema: "public", table: "chat_guest_messages"
+    }, ({ old }) => {
+      if (switchToken !== state.roomSwitchToken || state.activeRoom?.id !== room.id || !old?.id) return;
+      const exists = state.messages.some((item) => item.id === old.id);
+      if (!exists) return;
+      state.messages = state.messages.filter((item) => item.id !== old.id);
+      pruneMessageTokens(old.id);
+      state.reactions = state.reactions.filter((item) => item.message_id !== old.id);
+      renderMessages();
+    });
 
-  state.typingChannel = supabase.channel(`commonroom-typing:${room.id}`);
-  state.typingChannel.on("broadcast", { event: "typing" }, ({ payload }) => {
-    if (state.activeRoom?.id === room.id) showTyping(payload);
+  const messagesReady = await waitForSubscription(messageChannel);
+  if (switchToken !== state.roomSwitchToken) {
+    await supabase.removeChannel(messageChannel);
+    return;
+  }
+  setConnectionStatus(messagesReady ? "Live" : "Reconnecting", messagesReady ? "live" : "warning");
+  if (!messagesReady) toast("Live updates are taking longer than expected.");
+
+  const typingChannel = supabase.channel(`commonroom-typing:${room.id}`);
+  state.typingChannel = typingChannel;
+  typingChannel.on("broadcast", { event: "typing" }, ({ payload }) => {
+    if (switchToken === state.roomSwitchToken && state.activeRoom?.id === room.id) showTyping(payload);
   });
-  const typingReady = await waitForSubscription(state.typingChannel);
-  if (switchToken !== state.roomSwitchToken) return;
+  const typingReady = await waitForSubscription(typingChannel);
+  if (switchToken !== state.roomSwitchToken) {
+    await supabase.removeChannel(typingChannel);
+    return;
+  }
   if (!typingReady) console.warn("Typing channel unavailable.");
 
-  await loadMessages(room.id);
+  try {
+    await loadMessages(room.id);
+  } catch (error) {
+    if (switchToken !== state.roomSwitchToken) return;
+    $("#messages").innerHTML = '<div class="empty-state"><div class="empty-illustration">!</div><h2>Conversation unavailable</h2><p>We could not load this room. Check your connection and try another channel.</p></div>';
+    setConnectionStatus("Connection issue", "warning");
+    throw error;
+  }
+  if (switchToken !== state.roomSwitchToken) return;
+
+  const messageIds = state.messages.map((message) => message.id);
+  const reactionResult = messageIds.length
+    ? await supabase.from("chat_guest_reactions").select("id,message_id,sender_key,emoji").in("message_id", messageIds)
+    : { data: [], error: null };
+  if (switchToken !== state.roomSwitchToken) return;
+  if (reactionResult.error) console.warn("Reactions unavailable:", reactionResult.error);
+  else state.reactions = reactionResult.data || [];
+  renderMessages();
+
+  const reactionChannel = supabase.channel("commonroom-reactions:" + room.id);
+  state.reactionChannel = reactionChannel;
+  reactionChannel.on("postgres_changes", {
+    event: "*", schema: "public", table: "chat_guest_reactions"
+  }, (payload) => {
+    if (switchToken !== state.roomSwitchToken || state.activeRoom?.id !== room.id) return;
+    const visibleIds = new Set(state.messages.map((message) => message.id));
+    let changed = false;
+    if (payload.eventType === "INSERT" && visibleIds.has(payload.new?.message_id)) {
+      if (!state.reactions.some((item) => item.id === payload.new.id)) {
+        state.reactions.push(payload.new);
+        changed = true;
+      }
+    } else if (payload.eventType === "DELETE" && payload.old?.id) {
+      const previous = state.reactions.find((item) => item.id === payload.old.id);
+      if (previous && visibleIds.has(previous.message_id)) {
+        state.reactions = state.reactions.filter((item) => item.id !== payload.old.id);
+        changed = true;
+      }
+    }
+    if (changed) renderMessages();
+  });
+  reactionChannel.subscribe((status) => {
+    if (switchToken !== state.roomSwitchToken) return;
+    if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") console.warn("Reaction updates are temporarily unavailable.");
+  });
   if (switchToken !== state.roomSwitchToken) return;
   await connectPresence(room.id, switchToken);
   if (switchToken !== state.roomSwitchToken) return;
@@ -153,26 +243,6 @@ async function loadMessages(roomId) {
   for (const message of state.messages) existing.set(message.id, message);
   state.messages = [...existing.values()].sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
   renderMessages();
-}
-function renderMessagesLegacy() {
-  const container = $("#messages");
-  if (!state.messages.length) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-illustration">✳</div><span class="empty-kicker">A FRESH START</span><h2>It’s quiet in here.</h2><p>Be the first to say hello and set the tone.</p></div>';
-    return;
-  }
-  let lastDay = "";
-  container.innerHTML = state.messages.map((message) => {
-    const day = new Date(message.created_at).toDateString();
-    const separator = day !== lastDay ? `<div class="day-divider"><span>${escapeHtml(formatDay(message.created_at))}</span></div>` : "";
-    lastDay = day;
-    const mine = message.sender_key === state.senderKey;
-    const name = message.sender_name || "Guest";
-    return `${separator}<article class="message ${mine ? "mine" : ""}">
-      <div class="avatar message-avatar ${mine ? "self-avatar" : ""}">${escapeHtml(initials(name))}</div>
-      <div class="message-content"><div class="message-meta"><strong>${escapeHtml(name)}</strong>${mine ? '<span class="you-tag">YOU</span>' : ""}<time>${formatTime(message.created_at)}</time></div><p>${escapeHtml(message.body).replace(/\n/g, "<br>")}</p></div>
-    </article>`;
-  }).join("");
-  container.scrollTop = container.scrollHeight;
 }
 async function connectPresence(roomId, switchToken) {
   if (state.presence) await supabase.removeChannel(state.presence);
@@ -192,20 +262,46 @@ async function connectPresence(roomId, switchToken) {
 function updateOnline() {
   const presenceState = state.presence?.presenceState() || {};
   const people = Object.values(presenceState).flat();
-  const unique = [...new Map(people.map((person) => [person.guest_id, person])).values()];
+  const valid = people.filter((person) => person && typeof person === "object" &&
+    typeof person.guest_id === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(person.guest_id));
+  const unique = [...new Map(valid.map((person) => [person.guest_id, {
+    guest_id: person.guest_id,
+    name: typeof person.name === "string" ? Array.from(person.name.trim()).slice(0, 32).join("") || "Guest" : "Guest"
+  }])).values()].slice(0, 100);
   state.online = new Map(unique.map((person) => [person.guest_id, person]));
   $("#online-count").textContent = `${unique.length} online`;
   $("#online-stack").innerHTML = unique.slice(0, 4).map((person) =>
     `<span class="online-avatar" title="${escapeHtml(person.name)}">${escapeHtml(initials(person.name))}</span>`).join("");
 }
+function renderTypers() {
+  const names = [...state.typers.values()].map((person) => person.name).filter(Boolean);
+  $("#typing-line").textContent = names.length === 0 ? "" :
+    names.length === 1 ? `${names[0]} is typing…` :
+    names.length === 2 ? `${names[0]} and ${names[1]} are typing…` :
+    `${names.length} people are typing…`;
+}
 function showTyping(payload) {
-  if (!payload || payload.guest_id === state.senderKey) return;
-  $("#typing-line").textContent = `${payload.name || "Someone"} is typing…`;
-  clearTimeout(state.typingTimer);
-  state.typingTimer = setTimeout(() => { $("#typing-line").textContent = ""; }, 1800);
+  if (!payload || payload.guest_id === state.senderKey || typeof payload.guest_id !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(payload.guest_id)) return;
+  const name = typeof payload.name === "string" ? Array.from(payload.name.trim()).slice(0, 32).join("") || "Someone" : "Someone";
+  state.typers.set(payload.guest_id, { name });
+  const existing = state.typingTimers.get(payload.guest_id);
+  if (existing) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    state.typers.delete(payload.guest_id);
+    state.typingTimers.delete(payload.guest_id);
+    renderTypers();
+  }, 1800);
+  state.typingTimers.set(payload.guest_id, timer);
+  renderTypers();
 }
 $("#message-input").addEventListener("input", () => {
-  if (!state.typingChannel || !$("#message-input").value.trim()) return;
+  const input = $("#message-input");
+  if (!state.typingChannel || !input.value.trim()) return;
+  const now = Date.now();
+  if (now - state.lastTypingSentAt < 1000) return;
+  state.lastTypingSentAt = now;
   state.typingChannel.send({ type: "broadcast", event: "typing", payload: { guest_id: state.senderKey, name: state.name } });
 });
 $("#message-form").addEventListener("submit", async (event) => {
@@ -270,12 +366,7 @@ window.addEventListener("pagehide", () => {
 askForName();
 $("#my-name").textContent = state.name;
 $("#my-avatar").textContent = initials(state.name);
-try { await loadRooms(); }
-catch (error) {
-  console.error(error);
-  $("#messages").innerHTML = '<div class="empty-state"><div class="empty-illustration">!</div><h2>We couldn’t connect.</h2><p>Check the Supabase project settings and try refreshing.</p></div>';
-  toast(error.message || "Unable to connect to chat.");
-}
+
 
 /* Interaction layer: persisted reactions, grouped messages, emoji and member cards. */
 const reactionEmojis = ["👍","❤️","😂","🎉","🔥","👀","🙌","🤔"];
@@ -304,31 +395,6 @@ function reactionMarkup(messageId) {
     '<button class="reaction-chip ' + (item.mine ? "reacted" : "") + '" type="button" data-react="' + emoji + '" data-message="' + messageId + '" aria-pressed="' + item.mine + '"><span>' + emoji + '</span><span>' + item.count + '</span></button>'
   ).join("");
 }
-function renderMessagesReactions() {
-  const container = $("#messages");
-  if (!state.messages.length) {
-    container.innerHTML = '<div class="empty-state"><div class="empty-illustration">✳</div><span class="empty-kicker">A FRESH START</span><h2>It’s quiet in here.</h2><p>Be the first to say hello and set the tone.</p></div>';
-    return;
-  }
-  let lastDay = "", previous = null;
-  container.innerHTML = state.messages.map((message) => {
-    const date = new Date(message.created_at);
-    const day = date.toDateString();
-    const separator = day !== lastDay ? '<div class="day-divider"><span>' + escapeHtml(formatDay(message.created_at)) + '</span></div>' : "";
-    lastDay = day;
-    const mine = message.sender_key === state.senderKey;
-    const name = message.sender_name || "Guest";
-    const grouped = previous && previous.sender_key === message.sender_key &&
-      (date - new Date(previous.created_at)) < 300000 && new Date(previous.created_at).toDateString() === day;
-    previous = message;
-    const avatar = '<button class="avatar message-avatar ' + (mine ? "self-avatar" : "") + '" type="button" data-profile="' + escapeHtml(name) + '" data-sender="' + message.sender_key + '" aria-label="View member profile">' + (grouped ? "" : escapeHtml(initials(name))) + '</button>';
-    const meta = grouped ? "" : '<div class="message-meta"><button class="message-author" type="button" data-profile="' + escapeHtml(name) + '" data-sender="' + message.sender_key + '">' + escapeHtml(name) + '</button>' + (mine ? '<span class="you-tag">YOU</span>' : "") + '<time>' + formatTime(message.created_at) + '</time></div>';
-    return separator + '<article class="message ' + (mine ? "mine" : "") + (grouped ? " grouped" : "") + '" data-message-card="' + message.id + '">' +
-      avatar + '<div class="message-content">' + meta + '<p>' + escapeHtml(message.body).replace(/\n/g, "<br>") + '</p>' +
-      '<div class="message-tools"><div class="reaction-list">' + reactionMarkup(message.id) + '</div><button class="add-reaction" type="button" data-add-reaction="' + message.id + '" aria-label="Add reaction" title="Add reaction">☺ <span>React</span></button></div></div></article>';
-  }).join("");
-  container.scrollTop = container.scrollHeight;
-}
 async function toggleReaction(messageId, emoji) {
   if (!reactionEmojis.includes(emoji)) return;
   const current = state.reactions.find((item) => item.message_id === messageId && item.sender_key === state.senderKey && item.emoji === emoji);
@@ -350,7 +416,11 @@ async function toggleReaction(messageId, emoji) {
       message_id: messageId, sender_key: state.senderKey, emoji,
       reaction_token_hash: await hashEditToken(token)
     }).select("id,message_id,sender_key,emoji").single();
-    if (result.error && result.error.code !== "23505") throw result.error;
+    if (result.error?.code === "23505") {
+      toast("That reaction already exists for this device key. Refresh the room before trying again.");
+      return;
+    }
+    if (result.error) throw result.error;
     if (result.data) {
       state.reactionTokens[tokenKey] = token;
       storage.set("commonroom-reaction-tokens", JSON.stringify(state.reactionTokens));
@@ -384,37 +454,6 @@ function openProfile(name, senderKey, anchor) {
   popover.style.top = Math.max(12, Math.min(rect.bottom + 8, window.innerHeight - 220)) + "px";
   popover.hidden = false;
 }
-const originalSelectRoom = selectRoom;
-selectRoom = async function(roomId) {
-  if (state.reactionChannel) await supabase.removeChannel(state.reactionChannel);
-  state.reactionChannel = null;
-  state.reactions = [];
-  await originalSelectRoom(roomId);
-  if (state.activeRoom?.id !== roomId) return;
-  const room = state.activeRoom;
-  if (!room) return;
-  const messageIds = state.messages.map((message) => message.id);
-  const result = messageIds.length
-    ? await supabase.from("chat_guest_reactions").select("id,message_id,sender_key,emoji").in("message_id", messageIds)
-    : { data: [], error: null };
-  if (state.activeRoom?.id !== room.id) return;
-  if (result.error) console.warn("Reactions unavailable:", result.error);
-  else state.reactions = result.data || [];
-  renderMessages();
-  state.reactionChannel = supabase.channel("commonroom-reactions:" + room.id)
-    .on("postgres_changes", { event: "*", schema: "public", table: "chat_guest_reactions" }, (payload) => {
-      const visibleMessageIds = new Set(state.messages.map((message) => message.id));
-      if (payload.eventType === "INSERT" && visibleMessageIds.has(payload.new.message_id)) {
-        if (!state.reactions.some((item) => item.id === payload.new.id)) state.reactions.push(payload.new);
-      } else if (payload.eventType === "DELETE") {
-        state.reactions = state.reactions.filter((item) => item.id !== payload.old.id);
-      }
-      renderMessages();
-    });
-  state.reactionChannel.subscribe((status) => {
-    if (status !== "SUBSCRIBED" && status !== "CHANNEL_ERROR") return;
-  });
-};
 $("#messages").addEventListener("click", async (event) => {
   const chip = event.target.closest("[data-react]");
   if (chip) {
@@ -527,22 +566,6 @@ function renderMessages() {
   }).join("");
   if (stickToBottom) container.scrollTop = container.scrollHeight;
 }
-const selectRoomWithThreads = selectRoom;
-selectRoom = async function(roomId) {
-  if (state.controlChannel) await supabase.removeChannel(state.controlChannel);
-  state.controlChannel = null;
-  await selectRoomWithThreads(roomId);
-  if (state.activeRoom?.id !== roomId) return;
-  clearReplyTarget();
-  const syncChannel = supabase.channel("commonroom-message-controls:" + roomId)
-    .on("postgres_changes", { event: "*", schema: "public", table: "chat_guest_messages", filter: "room_id=eq." + roomId }, (payload) => {
-      if (payload.eventType === "UPDATE") state.messages = state.messages.map((item) => item.id === payload.new.id ? { ...item, ...payload.new } : item);
-      else if (payload.eventType === "DELETE") state.messages = state.messages.filter((item) => item.id !== payload.old.id);
-      renderMessages();
-    });
-  state.controlChannel = syncChannel;
-  syncChannel.subscribe();
-};
 $("#messages").addEventListener("click", async (event) => {
   const reply = event.target.closest("[data-reply]");
   if (reply) {
@@ -557,8 +580,9 @@ $("#messages").addEventListener("click", async (event) => {
     const message = state.messages.find((item) => item.id === edit.dataset.edit);
     const next = window.prompt("Edit your message:", message?.body || "");
     if (next === null || !next.trim()) return;
+    if (next.trim().length > 2000) { toast("Messages must be 2,000 characters or fewer."); return; }
     const { data, error } = await supabase.rpc("edit_guest_message", { p_message_id: edit.dataset.edit, p_token: state.editTokens[edit.dataset.edit], p_body: next.trim() });
-    if (error || data !== true) toast(error?.message || "This message can no longer be edited on this device.");
+    if (error || data !== true) toast(error?.message || "The message was not updated. It may have been removed or your edit token is unavailable.");
     else {
       state.messages = state.messages.map((item) => item.id === edit.dataset.edit ? { ...item, body: next.trim(), edited_at: new Date().toISOString() } : item);
       renderMessages(); toast("Message updated.");
@@ -582,7 +606,7 @@ $("#messages").addEventListener("click", async (event) => {
 
 $("#reply-context").addEventListener("click", (event) => { if (event.target.closest("#cancel-reply")) clearReplyTarget(); });
 
-if (state.activeRoom) selectRoom(state.activeRoom.id).catch((error) => toast(error.message || "Could not load reactions."));
+
 
 
 /* Admin Control Room — all privileged reads/writes go through session-checked RPCs. */
@@ -692,6 +716,37 @@ async function adminAction(name,args,successMessage) {
   if(data!==true) { toast("The requested change was not applied."); return false; }
   toast(successMessage); await adminLoad(); return true;
 }
+function connectRoomsRealtime() {
+  if (state.roomsChannel) supabase.removeChannel(state.roomsChannel);
+  state.roomsChannel = supabase.channel("commonroom-room-directory")
+    .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_rooms" }, ({ new: room }) => {
+      if (!room?.id || state.rooms.some((item) => item.id === room.id)) return;
+      state.rooms.push({ id: room.id, slug: room.slug, name: room.name, description: room.description });
+      state.rooms.sort((a, b) => a.name.localeCompare(b.name));
+      renderRooms();
+    })
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_rooms" }, ({ new: room }) => {
+      if (!room?.id) return;
+      state.rooms = state.rooms.map((item) => item.id === room.id ? { ...item, ...room } : item);
+      if (state.activeRoom?.id === room.id) {
+        state.activeRoom = { ...state.activeRoom, ...room };
+        $("#active-room-name").textContent = room.name;
+        $("#room-description").textContent = room.description || "A place to talk.";
+      }
+      renderRooms();
+    })
+    .on("postgres_changes", { event: "DELETE", schema: "public", table: "chat_rooms" }, async ({ old }) => {
+      if (!old?.id) return;
+      const removedActiveRoom = state.activeRoom?.id === old.id;
+      state.rooms = state.rooms.filter((item) => item.id !== old.id);
+      if (removedActiveRoom) {
+        const fallback = state.rooms.find((item) => item.slug === "general") || state.rooms[0];
+        if (fallback) await selectRoom(fallback.id);
+      } else renderRooms();
+    });
+  state.roomsChannel.subscribe();
+}
+
 $("#admin-open").addEventListener("click",adminOpen);
 $("#admin-close").addEventListener("click",adminClose);
 $("#admin-overlay").addEventListener("click",(event)=>{if(event.target===$("#admin-overlay"))adminClose();});
@@ -755,3 +810,14 @@ $("#messages").addEventListener("click",async(event)=>{
   if(error)toast(error.message||"Could not submit report.");
   else toast(data?"Report sent to the moderation team.":"You have already reported this message.");
 });
+
+// Boot only after every interaction handler has been attached.
+connectRoomsRealtime();
+try {
+  await loadRooms();
+} catch (error) {
+  console.error(error);
+  $("#messages").innerHTML = '<div class="empty-state"><div class="empty-illustration">!</div><h2>We couldn’t connect.</h2><p>Check your connection and try refreshing the page.</p></div>';
+  setConnectionStatus("Connection issue", "warning");
+  toast(error.message || "Unable to connect to chat.");
+}

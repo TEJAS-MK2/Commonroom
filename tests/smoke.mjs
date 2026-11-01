@@ -21,3 +21,14 @@ assert.match(schema, /grant execute on function private\.enforce_chat_api_rate_l
 assert.match(schema, /private\.enforce_chat_api_rate_limit/);
 assert.match(workflow, /node tests\/smoke\.mjs/);
 console.log("Commonroom security and responsive smoke checks passed.");
+
+assert.match(app, /admin_login/);
+assert.match(app, /admin_overview/);
+assert.match(app, /submit_guest_report/);
+assert.doesNotMatch(app, /6780/, "the admin PIN must never appear in browser code");
+assert.match(schema, /private\.chat_admin_login/);
+assert.match(schema, /private\.chat_admin_sessions/);
+assert.match(schema, /grant execute on function public\.admin_overview\(text\) to anon,authenticated/);
+assert.match(schema, /private\.chat_admin_audit/);
+assert.match(css, /\.admin-frame/);
+assert.match(css, /@media\(max-width:640px\)/);

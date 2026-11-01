@@ -253,3 +253,41 @@ body{background:radial-gradient(ellipse at 12% 0%,#25433355 0,transparent 38%),r
  .message-content{max-width:calc(100% - 44px)}
 }
 @media(prefers-reduced-motion:reduce){.message{animation:none}}
+
+/* Trust & safety surfaces and final visual refinement. */
+.moderator-open{padding:8px 12px;border:1px solid #425c49;border-radius:9px;background:#b8e4c90c;color:#c4e7cc;font-size:10px;font-weight:700;letter-spacing:.2px;white-space:nowrap;transition:.18s}
+.moderator-open:hover{border-color:#8ab899;background:#b8e4c91a;transform:translateY(-1px)}
+.moderator-panel{position:fixed;z-index:80;inset:18px 18px 18px auto;width:min(480px,calc(100vw - 36px));display:flex;flex-direction:column;overflow:hidden;border:1px solid #3b5544;border-radius:20px;background:linear-gradient(155deg,#18251e,#101813 75%);box-shadow:0 28px 100px #000b;color:#e7f0e9}
+.moderator-panel[hidden]{display:none}
+.moderator-head{display:flex;justify-content:space-between;gap:16px;padding:24px 23px 19px;border-bottom:1px solid #2d4034;background:radial-gradient(ellipse at 5% 0%,#31583b55,transparent 65%)}
+.moderator-eyebrow{font-size:8px;font-weight:800;letter-spacing:1.7px;color:#9ecbab}
+.moderator-head h2{margin:9px 0 5px;font:800 22px Manrope,sans-serif;letter-spacing:-.7px}
+.moderator-head p{margin:0;color:#8fa296;font-size:11px}
+.moderator-head>button{width:32px;height:32px;border:1px solid #354a3b;border-radius:9px;background:#ffffff08;color:#a9baad;font-size:20px}
+.moderator-toolbar{display:flex;align-items:center;gap:8px;padding:13px 20px;border-bottom:1px solid #293a30}
+.moderator-toolbar span{flex:1;color:#a7c9af;font-size:8px;font-weight:800;letter-spacing:1.1px}
+.moderator-toolbar button{padding:7px 9px;border:1px solid #344a3a;border-radius:8px;background:#ffffff05;color:#a9baad;font-size:9px}
+.moderator-toolbar button:hover{border-color:#71977b;color:#d4edda}
+.moderator-reports{flex:1;overflow:auto;padding:13px 15px;scrollbar-width:thin;scrollbar-color:#405947 transparent}
+.moderator-report{padding:14px;margin-bottom:10px;border:1px solid #34483a;border-radius:13px;background:linear-gradient(130deg,#1a2920,#152019)}
+.report-meta{display:flex;justify-content:space-between;gap:8px;align-items:center}
+.report-meta span{padding:4px 7px;border-radius:5px;background:#e5b76b16;color:#e8c58d;font-size:8px;font-weight:800;text-transform:uppercase;letter-spacing:.7px}
+.report-meta time{color:#788c7d;font-size:9px}
+.moderator-report>p{margin:11px 0 6px;color:#e0e9e2;font-size:11px;line-height:1.6;overflow-wrap:anywhere}
+.moderator-report>small{color:#8fa296;font-size:9px;line-height:1.6}
+.report-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.report-actions button{padding:6px 8px;border:1px solid #3b5041;border-radius:7px;background:#ffffff05;color:#a9baad;font-size:8px}
+.report-actions button:hover{border-color:#83ae8d;color:#d8eddd;background:#b8e4c90c}
+.report-actions button:first-child{border-color:#70483f;color:#e7aaa0}
+.moderator-empty{display:grid;place-items:center;min-height:180px;padding:20px;border:1px dashed #34483a;border-radius:12px;color:#8fa296;text-align:center;font-size:11px;line-height:1.7}
+.moderator-foot{padding:12px 19px;border-top:1px solid #2c3d32;color:#718578;font-size:9px;line-height:1.6}
+.message-actions button[data-report]{color:#c59c91}
+.message-actions button[data-report]:hover{border-color:#9b6658;color:#f0c0b6}
+.message-actions button[data-pin]{color:#e7d99d;border-color:#6b603e}
+.message:target{background:#b8e4c90b;border-radius:12px}
+@media(max-width:700px){
+ .moderator-open{padding:7px 8px;font-size:8px}
+ .moderator-panel{inset:8px;width:calc(100vw - 16px);border-radius:16px}
+ .moderator-head{padding:19px 17px 15px}.moderator-toolbar{padding:10px 13px}.moderator-reports{padding:10px}
+ .report-actions button{font-size:9px;padding:7px 8px}
+}

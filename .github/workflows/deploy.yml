@@ -19,21 +19,17 @@ jobs:
     steps:
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
       - name: Set up Node.js
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: 22
-
       - name: Validate JavaScript module syntax
         run: node --input-type=module --check < app.js
-
       - name: Validate HTML structure and required elements
         run: |
           python - <<'PY'
           from html.parser import HTMLParser
           from pathlib import Path
-
           class PageParser(HTMLParser):
               def __init__(self):
                   super().__init__()
@@ -45,20 +41,14 @@ jobs:
                       if attrs["id"] in self.ids:
                           self.errors.append(f"duplicate id: {attrs['id']}")
                       self.ids.add(attrs["id"])
-
           parser = PageParser()
           parser.feed(Path("index.html").read_text(encoding="utf-8"))
-          required = {
-              "auth-screen", "chat-screen", "auth-form", "email", "password",
-              "display-name", "room-list", "direct-list", "new-dm", "attachment-input", "messages", "message-form",
-              "message-input", "send-button", "sign-out", "toast"
-          }
+          required = {"chat-screen", "room-list", "room-count", "new-room", "messages", "message-form", "message-input", "send-button", "change-name", "my-name", "my-avatar", "online-count", "toast"}
           missing = required - parser.ids
           if parser.errors or missing:
               raise SystemExit("; ".join(parser.errors + ([f"missing ids: {sorted(missing)}"] if missing else [])))
           print(f"HTML smoke check passed: {len(parser.ids)} unique IDs.")
           PY
-
       - name: Check client configuration for secret keys
         run: |
           python - <<'PY'
@@ -71,19 +61,16 @@ jobs:
               raise SystemExit("Supabase browser configuration is incomplete.")
           print("Browser configuration smoke check passed.")
           PY
-
       - name: Assemble static site
         run: |
           mkdir -p _site/supabase
           cp index.html styles.css app.js _site/
           cp supabase/config.js _site/supabase/
           touch _site/.nojekyll
-
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
         with:
           path: _site
-
   deploy:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs: build

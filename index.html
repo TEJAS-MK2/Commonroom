@@ -38,13 +38,15 @@
         <div class="sidebar-top"><a class="brand" href="#"><span class="brand-mark">C</span><span>chat<span class="brand-dot">.</span></span></a><button id="new-room" class="icon-button" title="Create room" aria-label="Create room">＋</button></div>
         <div class="workspace-label">WORKSPACE <span class="status-dot"></span></div>
         <div class="room-list" id="room-list"></div>
+        <div class="workspace-label direct-label">DIRECT MESSAGES <button id="new-dm" class="mini-add" type="button" title="Start a direct message">＋</button></div>
+        <div class="direct-list" id="direct-list"></div>
         <div class="sidebar-bottom"><div class="profile-chip"><div id="my-avatar" class="avatar">U</div><div class="profile-meta"><strong id="my-name">You</strong><span id="my-email">online</span></div><button id="sign-out" class="icon-button subtle" title="Sign out" aria-label="Sign out">↗</button></div></div>
       </aside>
       <section class="conversation">
         <header class="chat-header"><div><div class="channel-kicker">PUBLIC CHANNEL</div><h2><span class="hash">#</span><span id="active-room-name">general</span></h2><p id="room-description">A place for everyday conversations.</p></div><div class="header-right"><div class="online-stack" id="online-stack"></div><span id="online-count" class="online-count">0 online</span><button id="mobile-menu" class="icon-button mobile-only" aria-label="Open channels">☰</button></div></header>
         <div id="messages" class="messages" aria-live="polite"><div class="empty-state"><div class="empty-icon">✳</div><h3>Make the first move.</h3><p>Say hello and start the conversation.</p></div></div>
         <div id="typing-line" class="typing-line" aria-live="polite"></div>
-        <form id="message-form" class="composer"><button id="emoji-button" class="composer-tool" type="button" title="Add a smile">☺</button><input id="message-input" maxlength="2000" autocomplete="off" placeholder="Message #general" aria-label="Write a message" /><span class="composer-hint">ENTER ↵</span><button id="send-button" class="send-button" type="submit" aria-label="Send message">↑</button></form>
+        <form id="message-form" class="composer"><label for="attachment-input" id="attachment-button" class="composer-tool attachment-button" title="Attach a file" aria-label="Attach a file">⌁</label><input id="attachment-input" type="file" accept="image/jpeg,image/png,image/webp,application/pdf,text/plain" hidden /><button id="emoji-button" class="composer-tool" type="button" title="Add a smile">☺</button><input id="message-input" maxlength="2000" autocomplete="off" placeholder="Message #general" aria-label="Write a message" /><span class="composer-hint">ENTER ↵</span><button id="send-button" class="send-button" type="submit" aria-label="Send message">↑</button></form>
         <div class="composer-foot">Be thoughtful. This is a shared space.</div>
       </section>
     </section>

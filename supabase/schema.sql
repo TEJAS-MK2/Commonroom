@@ -326,3 +326,49 @@ begin
     alter publication supabase_realtime add table public.chat_direct_messages;
   end if;
 end $$;
+
+
+-- Anonymous public chat support. Existing authenticated tables are retained.
+-- Public messages intentionally have no verified user identity.
+create table if not exists public.chat_guest_messages (
+  id uuid primary key default gen_random_uuid(),
+  room_id uuid not null references public.chat_rooms(id) on delete cascade,
+  sender_key uuid not null,
+  sender_name text not null check (char_length(sender_name) between 2 and 32),
+  body text not null check (char_length(body) between 1 and 2000),
+  created_at timestamptz not null default now()
+);
+create index if not exists chat_guest_messages_room_created_idx
+  on public.chat_guest_messages (room_id, created_at desc);
+alter table public.chat_guest_messages enable row level security;
+
+drop policy if exists "Anyone can read public guest messages" on public.chat_guest_messages;
+create policy "Anyone can read public guest messages"
+  on public.chat_guest_messages for select to anon, authenticated using (true);
+drop policy if exists "Anyone can post public guest messages" on public.chat_guest_messages;
+create policy "Anyone can post public guest messages"
+  on public.chat_guest_messages for insert to anon, authenticated
+  with check (char_length(sender_name) between 2 and 32 and char_length(body) between 1 and 2000);
+
+grant select, insert on public.chat_guest_messages to anon, authenticated;
+grant select on public.chat_rooms to anon;
+grant insert on public.chat_rooms to anon;
+
+drop policy if exists "Anyone can read public chat rooms" on public.chat_rooms;
+create policy "Anyone can read public chat rooms"
+  on public.chat_rooms for select to anon using (true);
+drop policy if exists "Anyone can create public chat rooms" on public.chat_rooms;
+create policy "Anyone can create public chat rooms"
+  on public.chat_rooms for insert to anon with check (created_by is null);
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'chat_guest_messages'
+  ) then
+    alter publication supabase_realtime add table public.chat_guest_messages;
+  end if;
+end $$;

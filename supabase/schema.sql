@@ -372,3 +372,37 @@ begin
     alter publication supabase_realtime add table public.chat_guest_messages;
   end if;
 end $$;
+
+-- Persistent reactions for anonymous public chat messages.
+create table if not exists public.chat_guest_reactions (
+  id uuid primary key default gen_random_uuid(),
+  message_id uuid not null references public.chat_guest_messages(id) on delete cascade,
+  sender_key uuid not null,
+  emoji text not null check (emoji in ('👍','❤️','😂','🎉','🔥','👀','🙌','🤔')),
+  created_at timestamptz not null default now(),
+  constraint chat_guest_reactions_unique unique (message_id, sender_key, emoji)
+);
+create index if not exists chat_guest_reactions_message_idx
+  on public.chat_guest_reactions (message_id);
+alter table public.chat_guest_reactions enable row level security;
+drop policy if exists "Anyone can read public chat reactions" on public.chat_guest_reactions;
+create policy "Anyone can read public chat reactions"
+  on public.chat_guest_reactions for select to anon, authenticated using (true);
+drop policy if exists "Guests can add their own chat reactions" on public.chat_guest_reactions;
+create policy "Guests can add their own chat reactions"
+  on public.chat_guest_reactions for insert to anon, authenticated with check (true);
+drop policy if exists "Guests can remove their own chat reactions" on public.chat_guest_reactions;
+create policy "Guests can remove their own chat reactions"
+  on public.chat_guest_reactions for delete to anon, authenticated using (true);
+grant select, insert, delete on public.chat_guest_reactions to anon, authenticated;
+do $$
+begin
+  if not exists (
+    select 1 from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'chat_guest_reactions'
+  ) then
+    alter publication supabase_realtime add table public.chat_guest_reactions;
+  end if;
+end $$;

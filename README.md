@@ -2,7 +2,7 @@
 
 An open, real-time community chat built with HTML, CSS, JavaScript, and Supabase. No accounts, email addresses, passwords, or sign-in screen are required.
 
-**Live app:** https://tejas-mk2.github.io/Chat/
+**Live app:** https://tejas-mk2.github.io/Commonroom/
 
 ## Features
 

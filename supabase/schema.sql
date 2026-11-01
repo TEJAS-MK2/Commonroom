@@ -280,3 +280,16 @@ drop policy if exists "Chat clients can send chat broadcasts" on realtime.messag
 create policy "Chat clients can send chat broadcasts"
   on realtime.messages for insert to authenticated
   with check (realtime.topic() like 'chat-room:%' or realtime.topic() like 'chat-dm:%' or realtime.topic() = 'chat-presence');
+
+
+-- Cover the foreign keys used by participant and membership lookups.
+create index if not exists chat_conversation_members_user_idx
+  on public.chat_conversation_members (user_id);
+create index if not exists chat_conversations_created_by_idx
+  on public.chat_conversations (created_by);
+create index if not exists chat_conversations_participant_a_idx
+  on public.chat_conversations (participant_a);
+create index if not exists chat_conversations_participant_b_idx
+  on public.chat_conversations (participant_b);
+create index if not exists chat_direct_messages_sender_idx
+  on public.chat_direct_messages (sender_id);

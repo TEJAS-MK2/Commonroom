@@ -71,7 +71,7 @@ assert.match(schema, /private\.chat_admin_audit/);
 assert.match(schema, /commonroom-admin-global/);
 
 // Deployment artifact must include the newly linked favicon.
-assert.match(workflow, /cp favicon\.svg _site\//);
+assert.match(workflow, /cp index\.html styles\.css app\.js favicon\.svg _site\//);
 assert.match(workflow, /node tests\/smoke\.mjs/);
 assert.match(workflow, /node --input-type=module --check/);
 assert.match(workflow, /Path\("favicon\.svg"\)/);

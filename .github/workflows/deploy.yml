@@ -25,6 +25,15 @@ jobs:
           node-version: 22
       - name: Validate JavaScript module syntax
         run: node --input-type=module --check < app.js
+      - name: Validate moderation Edge Function syntax
+        run: node --input-type=module --check < supabase/functions/chat-moderation/index.ts
+      - name: Scan browser assets for privileged Supabase keys
+        run: |
+          if grep -En 'sb_secret_|SUPABASE_SERVICE_ROLE|service_role:' app.js index.html styles.css; then
+            echo "Privileged Supabase credentials must never ship to the browser."
+            exit 1
+          fi
+          echo "Browser asset secret scan passed."
       - name: Validate HTML structure and required elements
         run: |
           python - <<'PY'
@@ -43,7 +52,7 @@ jobs:
                       self.ids.add(attrs["id"])
           parser = PageParser()
           parser.feed(Path("index.html").read_text(encoding="utf-8"))
-          required = {"chat-screen", "room-list", "room-count", "new-room", "messages", "message-form", "message-input", "send-button", "change-name", "my-name", "my-avatar", "online-count", "toast"}
+          required = {"chat-screen", "room-list", "room-count", "new-room", "messages", "message-form", "message-input", "send-button", "change-name", "my-name", "my-avatar", "online-count", "toast", "moderator-open", "moderator-panel", "moderator-reports", "moderator-block-list", "pinned-banner", "reply-context", "emoji-picker", "profile-popover"}
           missing = required - parser.ids
           if parser.errors or missing:
               raise SystemExit("; ".join(parser.errors + ([f"missing ids: {sorted(missing)}"] if missing else [])))

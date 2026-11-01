@@ -485,3 +485,7 @@ for each row execute function public.enforce_guest_reaction_limits();
 
 -- Current deployed anti-abuse hardening.
 create index if not exists chat_guest_messages_reply_to_idx on public.chat_guest_messages(reply_to);
+
+-- Historical reports are retained privately; public clients have no access.
+alter table public.chat_guest_reports enable row level security;
+revoke all on public.chat_guest_reports from anon, authenticated;

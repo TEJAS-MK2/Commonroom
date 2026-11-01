@@ -117,7 +117,7 @@ async function selectRoom(roomId) {
 
   await loadMessages(room.id);
   await connectPresence(room.id);
-  $("#sidebar").classList.remove("open");
+  setSidebarOpen(false);
 }
 async function loadMessages(roomId) {
   const { data, error } = await supabase.from("chat_guest_messages")
@@ -167,6 +167,7 @@ function updateOnline() {
   const presenceState = state.presence?.presenceState() || {};
   const people = Object.values(presenceState).flat();
   const unique = [...new Map(people.map((person) => [person.guest_id, person])).values()];
+  state.online = new Map(unique.map((person) => [person.guest_id, person]));
   $("#online-count").textContent = `${unique.length} online`;
   $("#online-stack").innerHTML = unique.slice(0, 4).map((person) =>
     `<span class="online-avatar" title="${escapeHtml(person.name)}">${escapeHtml(initials(person.name))}</span>`).join("");
@@ -225,7 +226,22 @@ $("#change-name").addEventListener("click", () => {
   try { setName(next); state.presence?.track({ guest_id: state.senderKey, name: state.name, online_at: new Date().toISOString() }); toast("Display name updated."); }
   catch (error) { toast(error.message); }
 });
-$("#mobile-menu").addEventListener("click", () => $("#sidebar").classList.toggle("open"));
+function setSidebarOpen(open) {
+  const sidebar = $("#sidebar");
+  const menu = $("#mobile-menu");
+  const backdrop = $("#sidebar-backdrop");
+  sidebar.classList.toggle("open", open);
+  menu.setAttribute("aria-expanded", String(open));
+  backdrop.hidden = !open;
+}
+$("#mobile-menu").addEventListener("click", () => setSidebarOpen(!$("#sidebar").classList.contains("open")));
+$("#sidebar-backdrop").addEventListener("click", () => setSidebarOpen(false));
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closePopovers();
+    setSidebarOpen(false);
+  }
+});
 window.addEventListener("pagehide", () => {
   if (state.presence) supabase.removeChannel(state.presence);
 });
@@ -429,6 +445,7 @@ function setReplyTarget(message) {
 }
 function renderMessages() {
   const container = $("#messages");
+  const stickToBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 140;
   if (!state.messages.length) {
     container.innerHTML = '<div class="empty-state"><div class="empty-illustration">✳</div><span class="empty-kicker">A FRESH START</span><h2>It’s quiet in here.</h2><p>Be the first to say hello and set the tone.</p></div>';
     return;
@@ -452,6 +469,7 @@ function renderMessages() {
       '<div class="message-content">' + meta + (parent ? '<button class="reply-quote" type="button" data-jump="' + parent.id + '"><b>↪ ' + escapeHtml(parent.sender_name) + '</b><span>' + escapeHtml(parent.body.slice(0, 90)) + '</span></button>' : '') +
       '<p>' + escapeHtml(message.body).replace(/\n/g, '<br>') + '</p><div class="message-tools"><div class="reaction-list">' + reactionMarkup(message.id) + '</div><button class="add-reaction" type="button" data-add-reaction="' + message.id + '">☺ <span>React</span></button></div>' + actions + '</div></article>';
   }).join("");
+  if (stickToBottom) container.scrollTop = container.scrollHeight;
 }
 const selectRoomWithThreads = selectRoom;
 selectRoom = async function(roomId) {

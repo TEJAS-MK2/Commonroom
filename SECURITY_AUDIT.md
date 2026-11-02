@@ -23,6 +23,12 @@ This is a successful CI/deployment and configuration review, **not** a full live
 - [x] Private token/session/admin tables have RLS enabled and direct grants to `public`, `anon`, and `authenticated` revoked.
 - [x] CI runs syntax checks, repository smoke checks, Playwright desktop/mobile checks, HTML checks, and browser-asset secret scans.
 - [x] Playwright tests explicitly assert that the browser does not contact the production Supabase project.
+- [x] Read-only production SQL checks confirmed three public rooms and Realtime publication membership for rooms, guest messages, and guest reactions.
+- [x] Read-only privilege checks confirmed anonymous users cannot read/write moderation reports, cannot insert directly into guest messages, and cannot read private guest sessions or admin configuration; anonymous message reads remain enabled for the public chat.
+
+## Read-only production checks
+
+The live database returned three public rooms, one guest message, and two reactions at the time of inspection. The three chat tables (rooms, guest messages, and guest reactions) were present in the `supabase_realtime` publication. Direct privilege checks returned: anonymous SELECT on public guest messages = allowed; anonymous INSERT on guest messages = denied; anonymous SELECT/INSERT on moderation reports = denied; anonymous SELECT on private guest sessions = denied; anonymous SELECT on private admin configuration = denied. No message bodies, session tokens, PIN hashes, or other private row contents were retrieved for this check.
 
 ## Residual risks and follow-up
 

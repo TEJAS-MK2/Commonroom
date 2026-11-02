@@ -84,7 +84,7 @@ assert.match(schema, /private\.chat_guest_sessions/);
 assert.match(guestSessionMigration, /create_guest_session/);
 assert.match(app, /p_session_token:\s*state\.sessionToken/);
 assert.doesNotMatch(app, /p_sender_key:\s*state\.senderKey/);
-assert.doesNotMatch(app, /state\\.senderKey\\s*=\\s*crypto\\.randomUUID/);
+assert.doesNotMatch(app, /state\.senderKey\s*=\s*crypto\.randomUUID/);
 
 // Deployment artifact must include the newly linked favicon.
 assert.match(workflow, /cp index\.html styles\.css app\.js favicon\.svg _site\//);

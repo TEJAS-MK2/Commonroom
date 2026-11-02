@@ -27,6 +27,21 @@ jobs:
         run: node --input-type=module --check < app.js
       - name: Run security and responsive smoke checks
         run: node tests/smoke.mjs
+      - name: Install pinned Playwright browser test dependency
+        run: |
+          npm init -y
+          npm install --no-save --no-package-lock playwright@1.64.1
+          npx playwright install --with-deps chromium
+      - name: Run desktop and mobile browser tests
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 > /tmp/commonroom-http.log 2>&1 &
+          SERVER_PID=$!
+          trap 'kill "$SERVER_PID" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:4173/ >/dev/null; then break; fi
+            sleep 1
+          done
+          node tests/browser.mjs
       - name: Scan browser assets for privileged Supabase keys
         run: |
           if grep -En 'sb_secret_|SUPABASE_SERVICE_ROLE|service_role:' app.js index.html styles.css; then

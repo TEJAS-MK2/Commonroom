@@ -131,10 +131,10 @@ node --input-type=module --check < app.js
 node tests/smoke.mjs
 npm install --no-save --no-package-lock playwright@1.64.1
 npx playwright install chromium
-python -m http.server 8000
+python -m http.server 4173
 ```
 
-In another terminal, run `node tests/browser.mjs` while the local server is running on port 4173 (or update the test URL accordingly).
+In another terminal, run `node tests/browser.mjs` while that server is running.
 
 The Playwright browser tests use a mocked Supabase client. They validate client lifecycle, room switching, guest-session handling, admin modal behavior, and desktop/mobile layout without sending writes to the production database. They do **not** replace a separate live-backend acceptance test with two real browser sessions.
 

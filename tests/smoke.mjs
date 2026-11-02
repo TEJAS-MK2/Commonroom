@@ -7,7 +7,7 @@ const html = readFileSync("index.html", "utf8");
 const schema = readFileSync("supabase/schema.sql", "utf8");
 const workflow = readFileSync(".github/workflows/deploy.yml", "utf8");
 const readme = readFileSync("README.md", "utf8");
-const adminHardeningMigration = readFileSync("supabase/migrations/20261102041000_trust_admin_login_proxy_ip_and_remove_duplicate_index.sql", "utf8");
+const adminHardeningMigration = readFileSync("supabase/migrations/20261102041737_trust_admin_login_proxy_ip_and_remove_duplicate_index.sql", "utf8");
 
 const count = (value, pattern) => (value.match(pattern) || []).length;
 

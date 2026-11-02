@@ -9,6 +9,7 @@ const workflow = readFileSync(".github/workflows/deploy.yml", "utf8");
 const readme = readFileSync("README.md", "utf8");
 const adminHardeningMigration = readFileSync("supabase/migrations/20261102041737_trust_admin_login_proxy_ip_and_remove_duplicate_index.sql", "utf8");
 const guestSessionMigration = readFileSync("supabase/migrations/20261102042536_issue_server_guest_sessions.sql", "utf8");
+const guestSessionCleanupMigration = readFileSync("supabase/migrations/20261102043000_remove_legacy_guest_identity_rpc_overloads.sql", "utf8");
 
 const count = (value, pattern) => (value.match(pattern) || []).length;
 
@@ -85,6 +86,10 @@ assert.match(guestSessionMigration, /create_guest_session/);
 assert.match(app, /p_session_token:\s*state\.sessionToken/);
 assert.doesNotMatch(app, /p_sender_key:\s*state\.senderKey/);
 assert.doesNotMatch(app, /state\.senderKey\s*=\s*crypto\.randomUUID/);
+assert.match(guestSessionCleanupMigration, /drop function if exists public\\.create_guest_message\\(uuid,uuid,text,text,uuid,text\\)/i);
+assert.match(guestSessionCleanupMigration, /drop function if exists public\\.create_guest_reaction\\(uuid,uuid,text,text\\)/i);
+assert.match(guestSessionCleanupMigration, /drop function if exists public\\.submit_guest_report\\(uuid,uuid,text,text\\)/i);
+assert.match(html, /app\\.js\\?v=20261102-guest-session-v1/);
 
 // Deployment artifact must include the newly linked favicon.
 assert.match(workflow, /cp index\.html styles\.css app\.js favicon\.svg _site\//);

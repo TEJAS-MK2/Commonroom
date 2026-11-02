@@ -9,6 +9,7 @@ const workflow = readFileSync(".github/workflows/deploy.yml", "utf8");
 const readme = readFileSync("README.md", "utf8");
 const adminHardeningMigration = readFileSync("supabase/migrations/20261102041737_trust_admin_login_proxy_ip_and_remove_duplicate_index.sql", "utf8");
 const guestSessionMigration = readFileSync("supabase/migrations/20261102042536_issue_server_guest_sessions.sql", "utf8");
+const guestSessionCleanupMigration = readFileSync("supabase/migrations/20261102043000_remove_legacy_guest_identity_rpc_overloads.sql", "utf8");
 
 const count = (value, pattern) => (value.match(pattern) || []).length;
 
@@ -26,8 +27,6 @@ assert.match(app, /now - state\.lastTypingSentAt < 1000/, "typing broadcasts sho
 assert.match(app, /typingTimers: new Map\(\)/, "typing timers should be tracked per guest");
 assert.match(app, /connectRoomsRealtime\(\)/);
 assert.match(app, /storeLimitedToken\([\s\S]*?limit = 1000/, "local owner-token maps must be bounded");
-assert.match(app, /create_guest_message/);
-assert.match(app, /create_guest_reaction/);
 assert.doesNotMatch(app, /edit_token_hash|reaction_token_hash/, "private token hashes must not be sent in public row writes");
 assert.match(app, /Messages must be 2,000 characters or fewer/);
 assert.match(app, /result\.error\?\.code === "23505"/, "reaction duplicate conflicts must not be swallowed");
@@ -66,7 +65,6 @@ assert.match(schema, /revoke all on private\.chat_guest_message_tokens[\s\S]*?fr
 // Existing Admin Control Room controls.
 assert.match(app, /admin_login/);
 assert.match(app, /admin_overview/);
-assert.match(app, /submit_guest_report/);
 assert.doesNotMatch(app, /6780/, "the admin PIN must never appear in browser code");
 assert.match(schema, /private\.chat_admin_sessions/);
 assert.match(schema, /private\.chat_admin_audit/);
@@ -85,6 +83,10 @@ assert.match(guestSessionMigration, /create_guest_session/);
 assert.match(app, /p_session_token:\s*state\.sessionToken/);
 assert.doesNotMatch(app, /p_sender_key:\s*state\.senderKey/);
 assert.doesNotMatch(app, /state\.senderKey\s*=\s*crypto\.randomUUID/);
+assert.ok(guestSessionCleanupMigration.includes("drop function if exists public.create_guest_message(uuid,uuid,text,text,uuid,text);"));
+assert.ok(guestSessionCleanupMigration.includes("drop function if exists public.create_guest_reaction(uuid,uuid,text,text);"));
+assert.ok(guestSessionCleanupMigration.includes("drop function if exists public.submit_guest_report(uuid,uuid,text,text);"));
+assert.match(html, /app\.js\?v=20261102-guest-session-v1/);
 
 // Deployment artifact must include the newly linked favicon.
 assert.match(workflow, /cp index\.html styles\.css app\.js favicon\.svg _site\//);

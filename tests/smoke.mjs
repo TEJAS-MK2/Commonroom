@@ -70,14 +70,14 @@ assert.doesNotMatch(app, /6780/, "the admin PIN must never appear in browser cod
 assert.match(schema, /private\.chat_admin_sessions/);
 assert.match(schema, /private\.chat_admin_audit/);
 assert.match(schema, /commonroom-admin-global/);
-const adminLoginDefinitions = [...schema.matchAll(/create or replace function private\\.chat_admin_login\\(p_pin text\\)[\\s\\S]*?\\n\\$\\$;/gi)];
+const adminLoginDefinitions = [...schema.matchAll(/create or replace function private\.chat_admin_login\(p_pin text\)[\s\S]*?\n\$\$;/gi)];
 assert.ok(adminLoginDefinitions.length > 0, "admin login verifier must exist in the schema snapshot");
 const activeAdminLogin = adminLoginDefinitions.at(-1)[0];
 assert.match(activeAdminLogin, /cf-connecting-ip/, "admin throttling must use the trusted proxy client IP");
 assert.doesNotMatch(activeAdminLogin, /x-forwarded-for/i, "admin throttling must not trust caller-supplied X-Forwarded-For");
 assert.match(adminHardeningMigration, /cf-connecting-ip/);
 assert.doesNotMatch(adminHardeningMigration, /x-forwarded-for/i);
-assert.match(adminHardeningMigration, /drop index if exists public\\.chat_guest_reports_message_reporter_uidx/i);
+assert.match(adminHardeningMigration, /drop index if exists public\.chat_guest_reports_message_reporter_uidx/i);
 assert.doesNotMatch(schema, /create unique index if not exists chat_guest_reports_message_reporter_uidx/i, "redundant unique index must be removed from the schema snapshot");
 
 // Deployment artifact must include the newly linked favicon.

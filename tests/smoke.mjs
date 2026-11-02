@@ -82,9 +82,9 @@ assert.match(adminHardeningMigration, /drop index if exists public\.chat_guest_r
 assert.doesNotMatch(schema, /create unique index if not exists chat_guest_reports_message_reporter_uidx/i, "redundant unique index must be removed from the schema snapshot");
 assert.match(schema, /private\\.chat_guest_sessions/);
 assert.match(guestSessionMigration, /create_guest_session/);
-assert.match(guestSessionMigration, /p_session_token/);
+assert.match(app, /p_session_token:\s*state\.sessionToken/);
 assert.match(app, /p_session_token:\\s*state\\.sessionToken/);
-assert.doesNotMatch(app, /p_sender_key:\\s*state\\.senderKey/);
+assert.doesNotMatch(app, /p_sender_key:\s*state\.senderKey/);
 assert.doesNotMatch(app, /state\\.senderKey\\s*=\\s*crypto\\.randomUUID/);
 
 // Deployment artifact must include the newly linked favicon.

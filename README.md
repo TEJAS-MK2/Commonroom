@@ -29,6 +29,7 @@ Commonroom keeps the experience intentionally simple: choose a room, meet the pe
 - Responsive desktop, tablet, and mobile layouts with touch-aware controls
 - Room creation guardrails (100-room cap, five per minute globally, and five per network per hour)
 - Message and reaction ownership hashes stored in non-exposed private tables; public chat rows contain no edit/reaction token hashes
+- Server-issued anonymous guest sessions; write RPCs derive sender/reporter IDs from the session token
 - Keyboard focus states and reduced-motion support
 - Recent message history, with the latest 100 messages loaded per room
 
@@ -66,7 +67,7 @@ Use only the project's browser-safe publishable key (or legacy `anon` key). **Ne
 
 Open the Supabase SQL Editor and run `supabase/schema.sql`. Review the SQL and confirm it targets the intended project before applying it.
 
-The schema adds the message, reaction, and room-directory tables to Supabase Realtime as needed. The `public` schema must be exposed through the Supabase Data API, with the grants and row-level security policies required by the schema. The `public` schema must be exposed through the Supabase Data API, with the grants and row-level security policies required by the schema.
+The schema adds the message, reaction, and room-directory tables to Supabase Realtime as needed. The `public` schema must be exposed through the Supabase Data API, with the grants and row-level security policies required by the schema.
 
 ### 3. Start a local server
 
@@ -95,6 +96,9 @@ The project uses ES modules, so opening `index.html` directly as a `file://` URL
 │   ├── config.js
 │   ├── schema.sql
 │   └── migrations/
+├── tests/
+│   ├── browser.mjs
+│   └── smoke.mjs
 ├── CODE_OF_CONDUCT.md
 ├── CONTRIBUTING.md
 ├── README.md
@@ -107,16 +111,16 @@ Commonroom is a **public anonymous chat**, not a private messaging service.
 
 - Messages, display names, room names, reactions, and room presence are visible to people using the public application.
 - Display names are not verified identities and can be impersonated.
-- A random browser-local sender key distinguishes a visitor's messages. It is visible in public message data, is not authentication, and can be reset or spoofed. Per-device limits are therefore not identity controls; the network limiter is the primary abuse friction.
-- Because the sender key is public and user-controlled, an attacker can still race to reserve the same sender-key/reaction tuple. The client now reports the duplicate-key conflict rather than swallowing it, but only authenticated identities can fully prevent this ownership impersonation.
-- Message edit/delete ownership uses a random token kept in that browser's local storage. Only its SHA-256 hash is stored in `private.chat_guest_message_tokens`; reaction hashes are stored in `private.chat_guest_reaction_tokens`. Public rows and their Realtime payloads do not expose those hashes. Clearing site data or changing browsers can remove the ability to manage an earlier message.
-- Database triggers apply per-device duplicate and burst checks. A PostgREST pre-request hook uses the gateway's `cf-connecting-ip` header (not caller-controlled left-most `X-Forwarded-For`) for a 100-write / five-minute network ceiling on Commonroom message, reaction, room, and message-management endpoints. Missing or malformed proxy IP values share a fallback bucket. The counter is in the same database transaction as the request, so failed writes can roll back their own counter entry; this is abuse friction, not a standalone DDoS shield. Network-level controls can still be bypassed with distributed IPs or VPNs.
+- Anonymous identities are created by private database functions. The browser receives a random bearer session token; write RPCs hash and validate that token and derive the sender/reporter identity server-side. Legacy RPC overloads that accepted caller-selected sender/reporter UUIDs have been removed.
+- The session token is a bearer credential stored in browser local storage, so users should avoid sharing a browser profile on untrusted devices. Clearing site data or changing browsers can remove access to the earlier guest identity.
+- Message edit/delete ownership uses a random token kept in that browser's local storage. Only its SHA-256 hash is stored in `private.chat_guest_message_tokens`; reaction hashes are stored in `private.chat_guest_reaction_tokens`. Public rows and their Realtime payloads do not expose those hashes.
+- Database triggers apply per-session duplicate and burst checks. A PostgREST pre-request hook uses the gateway's `cf-connecting-ip` header (not caller-controlled left-most `X-Forwarded-For`) for a 100-write / five-minute network ceiling on Commonroom message, reaction, room, and message-management endpoints. Missing or malformed proxy IP values share a fallback bucket. The counter is in the same database transaction as the request, so failed writes can roll back their own counter entry; this is abuse friction, not a standalone DDoS shield. Network-level controls can still be bypassed with distributed IPs or VPNs.
 - Public room creation is globally capped at 100 rooms and five creations per minute, with an additional five-per-network-per-hour limit. Admins can delete rooms to free capacity. Anonymous networks are not verified identities.
 - Reaction removal uses a random browser-held token and a server-side hash check. Older reactions created before this protection may not be removable from the original device.
 - Do not use Commonroom to share passwords, financial information, personal records, or other sensitive content.
 - There are no private direct messages or private file uploads.
 
-See [SECURITY.md](SECURITY.md) for vulnerability reporting and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community expectations.
+See [SECURITY.md](SECURITY.md) for vulnerability reporting, [SECURITY_AUDIT.md](SECURITY_AUDIT.md) for the latest verification and residual-risk notes, and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community expectations.
 
 ## Development checks
 
@@ -125,12 +129,16 @@ Before opening a pull request, run:
 ```bash
 node --input-type=module --check < app.js
 node tests/smoke.mjs
+npm install --no-save --no-package-lock playwright@1.64.1
+npx playwright install chromium
 python -m http.server 8000
 ```
 
-Then test the application in a browser at desktop and mobile widths. Verify room switching, sending messages, replies, reactions, edit/delete ownership, presence, and navigation.
+In another terminal, run `node tests/browser.mjs` while the local server is running on port 4173 (or update the test URL accordingly).
 
-GitHub Actions checks JavaScript module syntax, security-sensitive interaction invariants, required HTML IDs, browser configuration, and accidental inclusion of privileged Supabase credentials. Pushes to `main` are deployed to GitHub Pages after the build succeeds.
+The Playwright browser tests use a mocked Supabase client. They validate client lifecycle, room switching, guest-session handling, admin modal behavior, and desktop/mobile layout without sending writes to the production database. They do **not** replace a separate live-backend acceptance test with two real browser sessions.
+
+GitHub Actions checks JavaScript module syntax, security-sensitive interaction invariants, required HTML IDs, browser configuration, accidental inclusion of privileged Supabase credentials, and desktop/mobile browser behavior against the mocked backend. Pushes to `main` are deployed to GitHub Pages after the build succeeds.
 
 ## Project policies
 
@@ -142,10 +150,9 @@ GitHub Actions checks JavaScript module syntax, security-sensitive interaction i
 
 Built with care for simple, open, real-time conversations. Contributions, bug reports, and thoughtful improvements are welcome.
 
-
 ## Admin Control Room
 
-The admin console is opened from the shield/control-room button in the sidebar. Admin authentication is verified by private database functions; the PIN verifier, login attempts, sessions, and audit log are stored in the non-exposed `private` schema. The four-digit PIN is a convenience credential, not a substitute for strong multi-factor authentication; keep the database owner account protected and consider moving to an identity-backed admin account before inviting additional operators. Admin login throttling uses the trusted proxy-provided `cf-connecting-ip` header, not caller-supplied `X-Forwarded-For`. Anonymous guest identities are issued by private database functions; write RPCs derive sender and reporter IDs from a seven-day session token rather than trusting a client-supplied sender key. The session token is a bearer credential stored in browser local storage, so users should avoid sharing a browser profile on untrusted devices. The legacy RPC signatures that accepted client-supplied sender and reporter UUIDs have been removed. The PIN is never embedded in the browser bundle. Failed PIN attempts are limited to five per IP per 15 minutes (with a global attempt ceiling), and successful sessions expire after 30 minutes.
+The admin console is opened from the control-room button in the sidebar. Admin authentication is verified by private database functions; the PIN verifier, login attempts, sessions, and audit log are stored in the non-exposed `private` schema. The current four-digit PIN is a convenience credential, not a substitute for strong multi-factor authentication. Keep the database owner account protected and migrate to identity-backed authentication with MFA before inviting additional operators. Admin login throttling uses the trusted proxy-provided `cf-connecting-ip` header, not caller-supplied `X-Forwarded-For`. The PIN is never embedded in the browser bundle. Failed PIN attempts are limited to five per IP per 15 minutes (with a global attempt ceiling), and successful sessions expire after 30 minutes.
 
 The control room provides community metrics, recent-message moderation, report review, room editing/deletion (the `general` room is protected), and an admin activity log. Admin sessions are held in memory for the current page only.
 

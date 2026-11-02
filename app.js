@@ -11,17 +11,13 @@ const storage = {
 };
 const state = {
   name: storage.get("commonroom-name", ""),
-  senderKey: storage.get("commonroom-guest-id", ""),
+  senderKey: "", sessionToken: storage.get("commonroom-session-token", ""),
   rooms: [], activeRoom: null, messages: [], messageChannel: null,
   typingChannel: null, presence: null, typingTimer: null, typingTimers: new Map(), typers: new Map(),
   lastTypingSentAt: 0, roomsChannel: null, reactionChannel: null, online: new Map(), roomSwitchToken: 0,
   reactions: [], replyTarget: null,
   editTokens: (() => { try { return JSON.parse(storage.get("commonroom-edit-tokens", "{}")) || {}; } catch { return {}; } })(),
 };
-if (!state.senderKey) {
-  state.senderKey = crypto.randomUUID();
-  storage.set("commonroom-guest-id", state.senderKey);
-}
 function escapeHtml(value = "") {
   return String(value).replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char]);
 }
@@ -52,6 +48,36 @@ function setName(name) {
   storage.set("commonroom-name", clean);
   $("#my-name").textContent = clean;
   $("#my-avatar").textContent = initials(clean);
+}
+async function initializeGuestSession() {
+  if (state.sessionToken) {
+    const resumed = await supabase.rpc("resume_guest_session", { p_session_token: state.sessionToken });
+    if (!resumed.error && resumed.data?.ok && resumed.data.sender_key) {
+      state.senderKey = resumed.data.sender_key;
+      if (!state.name || state.name.trim().length < 2) setName(resumed.data.display_name || "Guest");
+      else if (state.name !== resumed.data.display_name) {
+        const renamed = await supabase.rpc("update_guest_session_name", {
+          p_session_token: state.sessionToken,
+          p_display_name: state.name
+        });
+        if (renamed.error || renamed.data !== true) throw renamed.error || new Error("Could not restore your guest session name.");
+      }
+      storage.set("commonroom-guest-id", state.senderKey);
+      return;
+    }
+    state.sessionToken = "";
+    storage.set("commonroom-session-token", "");
+  }
+  const created = await supabase.rpc("create_guest_session", { p_display_name: state.name || "Guest" });
+  if (created.error) throw created.error;
+  if (!created.data?.ok || !created.data.token || !created.data.sender_key) {
+    throw new Error("Could not create a secure guest session. Please refresh and try again.");
+  }
+  state.sessionToken = created.data.token;
+  state.senderKey = created.data.sender_key;
+  storage.set("commonroom-session-token", state.sessionToken);
+  storage.set("commonroom-guest-id", state.senderKey);
+  if (created.data.display_name) setName(created.data.display_name);
 }
 function askForName() {
   if (state.name && state.name.trim().length >= 2) {
@@ -314,7 +340,7 @@ $("#message-form").addEventListener("submit", async (event) => {
     const token = createEditToken();
     const { data, error } = await supabase.rpc("create_guest_message", {
       p_room_id: state.activeRoom.id,
-      p_sender_key: state.senderKey,
+      p_session_token: state.sessionToken,
       p_sender_name: state.name,
       p_body: body,
       p_reply_to: state.replyTarget?.id || null,
@@ -342,11 +368,23 @@ $("#new-room").addEventListener("click", async () => {
   state.rooms.push(data); state.rooms.sort((a, b) => a.name.localeCompare(b.name));
   renderRooms(); await selectRoom(data.id);
 });
-$("#change-name").addEventListener("click", () => {
+$("#change-name").addEventListener("click", async () => {
   const next = window.prompt("Change your display name:", state.name);
   if (next === null) return;
-  try { setName(next); state.presence?.track({ guest_id: state.senderKey, name: state.name, online_at: new Date().toISOString() }); toast("Display name updated."); }
-  catch (error) { toast(error.message); }
+  const previous = state.name;
+  try {
+    setName(next);
+    const { data, error } = await supabase.rpc("update_guest_session_name", {
+      p_session_token: state.sessionToken,
+      p_display_name: state.name
+    });
+    if (error || data !== true) throw error || new Error("Could not save your display name.");
+    state.presence?.track({ guest_id: state.senderKey, name: state.name, online_at: new Date().toISOString() });
+    toast("Display name updated.");
+  } catch (error) {
+    setName(previous);
+    toast(error.message);
+  }
 });
 function setSidebarOpen(open) {
   const sidebar = $("#sidebar");
@@ -420,7 +458,7 @@ async function toggleReaction(messageId, emoji) {
     const token = createEditToken();
     const result = await supabase.rpc("create_guest_reaction", {
       p_message_id: messageId,
-      p_sender_key: state.senderKey,
+      p_session_token: state.sessionToken,
       p_emoji: emoji,
       p_token_hash: await hashEditToken(token)
     });
@@ -834,14 +872,15 @@ $("#messages").addEventListener("click",async(event)=>{
   const cleanReason=reason.trim().toLowerCase();
   if(!["spam","harassment","hate","personal-info","other"].includes(cleanReason)){toast("Choose spam, harassment, hate, personal-info, or other.");return;}
   const details=prompt("Optional note (up to 300 characters):","")||"";
-  const {data,error}=await supabase.rpc("submit_guest_report",{p_message_id:report.dataset.report,p_reporter_key:state.senderKey,p_reason:cleanReason,p_details:details.slice(0,300)});
+  const {data,error}=await supabase.rpc("submit_guest_report",{p_message_id:report.dataset.report,p_session_token:state.sessionToken,p_reason:cleanReason,p_details:details.slice(0,300)});
   if(error)toast(error.message||"Could not submit report.");
   else toast(data?"Report sent to the moderation team.":"You have already reported this message.");
 });
 
-// Boot only after every interaction handler has been attached.
-connectRoomsRealtime();
+// Boot only after every interaction handler has been attached and a server-issued identity exists.
 try {
+  await initializeGuestSession();
+  connectRoomsRealtime();
   await loadRooms();
 } catch (error) {
   console.error(error);

@@ -8,6 +8,7 @@ const schema = readFileSync("supabase/schema.sql", "utf8");
 const workflow = readFileSync(".github/workflows/deploy.yml", "utf8");
 const readme = readFileSync("README.md", "utf8");
 const adminHardeningMigration = readFileSync("supabase/migrations/20261102041737_trust_admin_login_proxy_ip_and_remove_duplicate_index.sql", "utf8");
+const guestSessionMigration = readFileSync("supabase/migrations/20261102042536_issue_server_guest_sessions.sql", "utf8");
 
 const count = (value, pattern) => (value.match(pattern) || []).length;
 
@@ -79,6 +80,11 @@ assert.match(adminHardeningMigration, /cf-connecting-ip/);
 assert.doesNotMatch(adminHardeningMigration, /request_headers\s*->>\s*'x-forwarded-for'/i);
 assert.match(adminHardeningMigration, /drop index if exists public\.chat_guest_reports_message_reporter_uidx/i);
 assert.doesNotMatch(schema, /create unique index if not exists chat_guest_reports_message_reporter_uidx/i, "redundant unique index must be removed from the schema snapshot");
+assert.match(schema, /private\.chat_guest_sessions/);
+assert.match(guestSessionMigration, /create_guest_session/);
+assert.match(app, /p_session_token:\s*state\.sessionToken/);
+assert.doesNotMatch(app, /p_sender_key:\s*state\.senderKey/);
+assert.doesNotMatch(app, /state\.senderKey\s*=\s*crypto\.randomUUID/);
 
 // Deployment artifact must include the newly linked favicon.
 assert.match(workflow, /cp index\.html styles\.css app\.js favicon\.svg _site\//);

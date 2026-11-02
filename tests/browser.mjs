@@ -24,9 +24,13 @@ export function createClient() {
       };
       return query;
     },
-    rpc(name) {
-      calls.push({ type: "rpc", name });
-      return Promise.resolve({ data: null, error: null });
+    rpc(name, args = {}) {
+      calls.push({ type: "rpc", name, args });
+      if (name === "create_guest_session") return Promise.resolve({ data: { ok: true, token: "f".repeat(64), sender_key: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", display_name: args.p_display_name, expires_at: "2026-11-09T00:00:00Z" }, error: null });
+      if (name === "resume_guest_session") return Promise.resolve({ data: { ok: true, sender_key: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", display_name: "Browser QA", expires_at: "2026-11-09T00:00:00Z" }, error: null });
+      if (name === "update_guest_session_name") return Promise.resolve({ data: true, error: null });
+      if (name === "create_guest_message") return Promise.resolve({ data: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", error: null });
+      return Promise.resolve({ data: true, error: null });
     },
     channel(name) {
       return {
@@ -84,7 +88,15 @@ async function testDesktop(browser) {
 
     await page.locator("#message-input").fill("This is a local browser test; it will not be sent.");
     assert.match(await page.locator("#message-input").inputValue(), /local browser test/);
-    await page.locator("#message-input").fill("");
+    await page.locator("#send-button").click();
+    await page.waitForFunction(() => document.querySelector("#message-input")?.value === "");
+    const writeCalls = await page.evaluate(() => window.__commonroomMockCalls);
+    const sessionCall = writeCalls.find((call) => call.name === "create_guest_session");
+    const messageCall = writeCalls.find((call) => call.name === "create_guest_message");
+    assert.ok(sessionCall, "browser must obtain a server-issued guest session");
+    assert.ok(messageCall, "message composer must use the session-backed RPC");
+    assert.equal(messageCall.args.p_session_token, "f".repeat(64));
+    assert.equal(Object.hasOwn(messageCall.args, "p_sender_key"), false, "client must not choose the sender identity");
 
     await page.locator("#admin-open").click();
     await page.locator("#admin-login-view").waitFor({ state: "visible" });
@@ -93,10 +105,14 @@ async function testDesktop(browser) {
     await page.locator("#admin-close").click();
     await page.locator("#admin-overlay").waitFor({ state: "hidden" });
 
-    assert.deepEqual(await page.evaluate(() => window.__commonroomMockCalls), []);
+    await page.reload({ waitUntil: "domcontentloaded" });
+    await page.waitForFunction(() => document.querySelector("#connection-status")?.dataset.state === "live");
+    const resumedCalls = await page.evaluate(() => window.__commonroomMockCalls);
+    assert.ok(resumedCalls.some((call) => call.name === "resume_guest_session"), "reload must resume the server-issued session");
+    assert.equal(resumedCalls.some((call) => call.name === "create_guest_session"), false, "reload must not create a second guest identity");
     assert.deepEqual(supabaseRequests, [], "browser smoke tests must not contact the production Supabase project");
     assert.deepEqual(pageErrors, [], "desktop page must not throw runtime errors");
-    console.log("PASS desktop: room switching, realtime state, composer, admin modal, no writes");
+    console.log("PASS desktop: session issue/resume, room switching, composer RPC payload, admin modal, isolated backend");
   } finally {
     await context.close();
   }
@@ -127,7 +143,8 @@ async function testMobile(browser) {
     }));
     assert.ok(dimensions.body <= dimensions.viewport + 1, `mobile body overflows: ${JSON.stringify(dimensions)}`);
     assert.ok(dimensions.app <= dimensions.viewport + 1, `mobile app shell overflows: ${JSON.stringify(dimensions)}`);
-    assert.deepEqual(await page.evaluate(() => window.__commonroomMockCalls), []);
+    const mobileCalls = await page.evaluate(() => window.__commonroomMockCalls);
+    assert.deepEqual(mobileCalls.map((call) => call.name), ["create_guest_session"]);
     assert.deepEqual(supabaseRequests, [], "mobile browser smoke tests must not contact the production Supabase project");
     assert.deepEqual(pageErrors, [], "mobile page must not throw runtime errors");
     console.log("PASS mobile: navigation, room switching, admin modal, 375px overflow check, no writes");

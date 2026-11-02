@@ -193,3 +193,5 @@ end;
 $$;
 revoke all on function private.enforce_chat_api_rate_limit() from public;
 grant execute on function private.enforce_chat_api_rate_limit() to anon,authenticated;
+
+notify pgrst, 'reload schema';

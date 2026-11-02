@@ -8,7 +8,7 @@ const schema = readFileSync("supabase/schema.sql", "utf8");
 const workflow = readFileSync(".github/workflows/deploy.yml", "utf8");
 const readme = readFileSync("README.md", "utf8");
 const adminHardeningMigration = readFileSync("supabase/migrations/20261102041737_trust_admin_login_proxy_ip_and_remove_duplicate_index.sql", "utf8");
-const guestSessionMigration = readFileSync("supabase/migrations/20261102043000_issue_server_guest_sessions.sql", "utf8");
+const guestSessionMigration = readFileSync("supabase/migrations/20261102042536_issue_server_guest_sessions.sql", "utf8");
 
 const count = (value, pattern) => (value.match(pattern) || []).length;
 
